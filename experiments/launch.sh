@@ -4,7 +4,7 @@ MODEL="egnn_dynamics"
 DROP_PROB="0.1"
 DATASET_PORTION="0.5"
 EPOCHS="3000"
-BATCH_SIZE="32"
+BATCH_SIZE="256"
 STABILITY_SAMPLES="500"
 GUIDANCE_WEIGHT="0.25" # Replace 'some_value' with the actual value
 
@@ -21,9 +21,8 @@ do
          s/GUIDANCE_WEIGHT_PLACEHOLDER/${GUIDANCE_WEIGHT}/g; \
          s/DROP_PROB_PLACEHOLDER/${DROP_PROB}/g; \
          s/TEST_EPOCHS_PLACEHOLDER/${TEST_EPOCHS}/g; \
-         s/DATASET_PORTION_PLACEHOLDER/${DATASET_PORTION}/g; \
-         s/PROPERTY_PLACEHOLDER/${property}/g" experiments/job_template.sh > temp_job_${property}.sh
+         s/PROPERTY_PLACEHOLDER/${property}/g" experiments/job_template.sh > experiments/temp_job_${property}.sh
 
-    sbatch temp_job_${property}.sh
+    # sbatch temp_job_${property}.sh
     # rm temp_job_${property}.sh  # Optional: Remove the temporary job file after submission
 done

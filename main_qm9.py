@@ -142,8 +142,24 @@ if args.resume is not None:
     normalization_factor = args.normalization_factor
     aggregation_method = args.aggregation_method
 
-    with open(join(args.resume, 'args.pickle'), 'rb') as f:
-        args = pickle.load(f)
+    # TODO: Verify if this breaks anything but commeting for now. 
+    # with open(join(args.resume, 'args.pickle'), 'rb') as f:
+    #     args = pickle.load(f)
+
+    # # things I want to follow the new framework
+    # guidance_weight_temp = args.guidance_weight
+    # classifier_free_guidance_temp = args.classifier_free_guidance
+    # class_drop_prob_temp = args.class_drop_prob
+    # batch_size_temp = args.batch_size
+    # test_epochs_temp = args.test_epochs
+
+    
+    
+    # args.guidance_weight = guidance_weight_temp
+    # args.classifier_free_guidance = classifier_free_guidance_temp
+    # args.class_drop_prob = class_drop_prob_temp
+    # args.batch_size = batch_size_temp
+    # args.test_epochs = test_epochs_temp
 
     args.resume = resume
     args.break_train_epoch = False
@@ -170,7 +186,7 @@ if args.no_wandb:
 else:
     mode = 'online' if args.online else 'offline'
 kwargs = {'entity': args.wandb_usr, 'name': args.exp_name + '_' + args.dataset + '_' +\
-                     args.model + '_splitRatio_' + '_guidence_weights_' + str(args.guidance_weight),
+                     args.model + '_splitRatio_' + '_guidance_weights_' + str(args.guidance_weight),
           'project': 'cfgdm', 'config': args,
           'settings': wandb.Settings(_disable_stats=False), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
@@ -214,10 +230,10 @@ def check_mask_correct(variables, node_mask):
 
 def main():
     if args.resume is not None:
-        flow_state_dict = torch.load(join(args.resume, 'flow.npy'))
-        optim_state_dict = torch.load(join(args.resume, 'optim.npy'))
+        flow_state_dict = torch.load(join(args.resume, 'generative_model_ema.npy'))
+        # optim_state_dict = torch.load(join(args.resume, 'optim.npy')) # we don't store optimizer state, check with Jiaqi
         model.load_state_dict(flow_state_dict)
-        optim.load_state_dict(optim_state_dict)
+        # optim.load_state_dict(optim_state_dict)
 
     # Initialize dataparallel if enabled and possible.
     if args.dp and torch.cuda.device_count() > 1:

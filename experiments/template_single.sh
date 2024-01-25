@@ -1,23 +1,23 @@
 #!/bin/bash
-#SBATCH --job-name=JOB_NAME_PLACEHOLDER
-#SBATCH --output=./logs/JOB_NAME_PLACEHOLDER_%j.out
-#SBATCH --error=./logs/JOB_NAME_PLACEHOLDER_%j.err
-#SBATCH --time=24:00:00
-#SBATCH --mem=32G
+#SBATCH --job-name=job_alpha
+#SBATCH --output=./logs/job_alpha_%j.out
+#SBATCH --error=./logs/job_alpha_%j.err
+#SBATCH --time=2-00:00:00
+#SBATCH --mem=16G
 #SBATCH --partition=atlas
 #SBATCH --account=atlas
-#SBATCH --cpus-per-task=32
-#SBATCH --gres=gpu:1  # Adjust if you need GPU resources
+#SBATCH --gres=gpu:4  # Adjust if you need GPU resources
 
 mkdir -p ./logs
 
-cd /atlas/u/akshgarg/cfgdm/GeoLDM
+source /sailhome/akshgarg/.bashrc
+cd /atlas/u/akshgarg/cfgedm/
 
 # Activate the Conda environment
-conda activate torch1
+conda activate torch3.7
 
 # Your job's commands go here
-echo python main_qm9.py --exp_name single_cfg_PROPERTY1_PLACEHOLDER_PROPERTY2_PLACEHOLDER \
+python main_qm9.py --exp_name single_cfg_PROPERTY_PLACEHOLDER \
                    --model MODEL_PLACEHOLDER \
                    --lr 2e-4 \
                    --nf 192 \
@@ -33,10 +33,10 @@ echo python main_qm9.py --exp_name single_cfg_PROPERTY1_PLACEHOLDER_PROPERTY2_PL
                    --include_charges False \
                    --diffusion_loss_type l2 \
                    --batch_size BATCH_SIZE_PLACEHOLDER \
-                   --conditioning PROPERTY1_PLACEHOLDER PROPERTY2_PLACEHOLDER \
+                   --conditioning PROPERTY_PLACEHOLDER \
                    --dataset qm9_second_half \
                    --classifier_free_guidance \
                    --guidance_weight GUIDANCE_WEIGHT_PLACEHOLDER \
-                   --test_epochs 20 \
+                   --test_epochs EPOCH_REPLACE_PLACEHOLDER \
                    --class_drop_prob DROP_PROB_PLACEHOLDER \
                    --normalize_factors [1,8,1] \

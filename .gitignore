@@ -30,3 +30,6 @@ qm9/property_prediction/outputs/*
 qm9_conditional.sh
 figures/
 geom_drugs.sh
+job_drafts/
+pretrained/
+logs/
