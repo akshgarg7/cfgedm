@@ -36,7 +36,12 @@ parser.add_argument('--diffusion_noise_precision', type=float, default=1e-5,
                     )
 parser.add_argument('--diffusion_loss_type', type=str, default='l2',
                     help='vlb, l2')
-
+parser.add_argument('--classifier_free_guidance', action='store_true', 
+                    help='Train LatentDiffusionModel model with classifier-free guidance')
+parser.add_argument('--guidance_weight', type=float, default=1, 
+                    help='Classifier-free guidance weight')
+parser.add_argument('--class_drop_prob', type=float, default=0.1, 
+                    help='Classifier property dropout probability')
 parser.add_argument('--n_epochs', type=int, default=200)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--lr', type=float, default=2e-4)
@@ -164,8 +169,10 @@ if args.no_wandb:
     mode = 'disabled'
 else:
     mode = 'online' if args.online else 'offline'
-kwargs = {'entity': args.wandb_usr, 'name': args.exp_name, 'project': 'e3_diffusion', 'config': args,
-          'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
+kwargs = {'entity': args.wandb_usr, 'name': args.exp_name + '_' + args.dataset + '_' +\
+                     args.model + '_splitRatio_' + '_guidence_weights_' + str(args.guidance_weight),
+          'project': 'cfgdm', 'config': args,
+          'settings': wandb.Settings(_disable_stats=False), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 wandb.save('*.txt')
 
@@ -234,6 +241,8 @@ def main():
         model_ema = model
         model_ema_dp = model_dp
 
+    assert(args.classifier_free_guidance == False if args.conditioning == False else True), "Can't use classifier-free guidance for unconditional generation"
+
     best_nll_val = 1e8
     best_nll_test = 1e8
     for epoch in range(args.start_epoch, args.n_epochs):
@@ -249,6 +258,8 @@ def main():
                 wandb.log(model.log_info(), commit=True)
 
             if not args.break_train_epoch:
+                if len(args.conditioning) > 0:
+                    prop_dist.set_normalizer(property_norms)
                 analyze_and_save(args=args, epoch=epoch, model_sample=model_ema, nodes_dist=nodes_dist,
                                  dataset_info=dataset_info, device=device,
                                  prop_dist=prop_dist, n_samples=args.n_stability_samples)

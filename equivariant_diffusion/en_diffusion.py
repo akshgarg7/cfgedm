@@ -6,6 +6,12 @@ from egnn import models
 from torch.nn import functional as F
 from equivariant_diffusion import utils as diffusion_utils
 
+def mask_context(context: torch.Tensor, p_class_drop: float):
+    bs, nodes, cs = context.size()
+    for dim in range(cs): # supports masking for any number of properties
+        indices_to_mask = torch.randperm(bs)[:int(context.size(0) * p_class_drop)]
+        context[indices_to_mask, :, dim] = torch.zeros_like(context[indices_to_mask, :, dim])
+    return context
 
 # Defining some useful util functions.
 def expm1(x: torch.Tensor) -> torch.Tensor:
@@ -258,7 +264,8 @@ class EnVariationalDiffusion(torch.nn.Module):
             dynamics: models.EGNN_dynamics_QM9, in_node_nf: int, n_dims: int,
             timesteps: int = 1000, parametrization='eps', noise_schedule='learned',
             noise_precision=1e-4, loss_type='vlb', norm_values=(1., 1., 1.),
-            norm_biases=(None, 0., 0.), include_charges=True):
+            norm_biases=(None, 0., 0.), include_charges=True, classifier_free_guidance=False,
+            guidance_weight=1, class_drop_prob = 0.1):
         super().__init__()
 
         assert loss_type in {'vlb', 'l2'}
@@ -293,6 +300,11 @@ class EnVariationalDiffusion(torch.nn.Module):
 
         if noise_schedule != 'learned':
             self.check_issues_norm_values()
+
+        self.w = guidance_weight
+        self.classifier_guidance = classifier_free_guidance
+        self.p_class_drop = class_drop_prob
+
 
     def check_issues_norm_values(self, num_stdevs=8):
         zeros = torch.zeros((1, 1))
@@ -478,7 +490,11 @@ class EnVariationalDiffusion(torch.nn.Module):
         gamma_0 = self.gamma(zeros)
         # Computes sqrt(sigma_0^2 / alpha_0^2)
         sigma_x = self.SNR(-0.5 * gamma_0).unsqueeze(1)
-        net_out = self.phi(z0, zeros, node_mask, edge_mask, context)
+        if self.classifier_guidance:
+            masked_context = torch.zeros_like(context)
+            net_out = (1 + self.w) * self.phi(z0, zeros, node_mask, edge_mask, context) - self.w * self.phi(z0, zeros, node_mask, edge_mask, masked_context)
+        else:
+            net_out = self.phi(z0, zeros, node_mask, edge_mask, context)
 
         # Compute mu for p(zs | zt).
         mu_x = self.compute_x_pred(net_out, z0, gamma_0)
@@ -698,6 +714,7 @@ class EnVariationalDiffusion(torch.nn.Module):
 
         if self.training:
             # Only 1 forward pass when t0_always is False.
+            context = mask_context(context, self.p_class_drop)
             loss, loss_dict = self.compute_loss(x, h, node_mask, edge_mask, context, t0_always=False)
         else:
             # Less variance in the estimator, costs two forward passes.
@@ -723,7 +740,11 @@ class EnVariationalDiffusion(torch.nn.Module):
         sigma_t = self.sigma(gamma_t, target_tensor=zt)
 
         # Neural net prediction.
-        eps_t = self.phi(zt, t, node_mask, edge_mask, context)
+        if self.classifier_guidance:
+            masked_context = torch.zeros_like(context)
+            eps_t = (1 + self.w) * self.phi(zt, t, node_mask, edge_mask, context) - self.w * self.phi(zt, t, node_mask, edge_mask, masked_context)
+        else:
+            eps_t = self.phi(zt, t, node_mask, edge_mask, context)
 
         # Compute mu for p(zs | zt).
         diffusion_utils.assert_mean_zero_with_mask(zt[:, :, :self.n_dims], node_mask)

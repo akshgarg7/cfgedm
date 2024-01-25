@@ -18,6 +18,8 @@ from qm9.analyze import check_stability
 from os.path import join
 from qm9.sampling import sample_chain, sample
 from configs.datasets_config import get_dataset_info
+from qm9.utils import prepare_context, compute_mean_mad
+
 
 
 def check_mask_correct(variables, node_mask):
@@ -27,13 +29,13 @@ def check_mask_correct(variables, node_mask):
 
 def save_and_sample_chain(args, eval_args, device, flow,
                           n_tries, n_nodes, dataset_info, id_from=0,
-                          num_chains=100):
+                          num_chains=100, prop_dist=None):
 
     for i in range(num_chains):
         target_path = f'eval/chain_{i}/'
 
         one_hot, charges, x = sample_chain(
-            args, device, flow, n_tries, dataset_info)
+            args, device, flow, n_tries, dataset_info, prop_dist=prop_dist)
 
         vis.save_xyz_file(
             join(eval_args.model_path, target_path), one_hot, charges, x,
@@ -47,11 +49,11 @@ def save_and_sample_chain(args, eval_args, device, flow,
 
 
 def sample_different_sizes_and_save(args, eval_args, device, generative_model,
-                                    nodes_dist, dataset_info, n_samples=10):
+                                    nodes_dist, dataset_info, n_samples=10, prop_dist=None):
     nodesxsample = nodes_dist.sample(n_samples)
     one_hot, charges, x, node_mask = sample(
         args, device, generative_model, dataset_info,
-        nodesxsample=nodesxsample)
+        nodesxsample=nodesxsample, prop_dist=prop_dist)
 
     vis.save_xyz_file(
         join(eval_args.model_path, 'eval/molecules/'), one_hot, charges, x,
@@ -61,13 +63,13 @@ def sample_different_sizes_and_save(args, eval_args, device, generative_model,
 
 def sample_only_stable_different_sizes_and_save(
         args, eval_args, device, flow, nodes_dist,
-        dataset_info, n_samples=10, n_tries=50):
+        dataset_info, n_samples=10, n_tries=50, prop_dist=None):
     assert n_tries > n_samples
 
     nodesxsample = nodes_dist.sample(n_tries)
     one_hot, charges, x, node_mask = sample(
         args, device, flow, dataset_info,
-        nodesxsample=nodesxsample)
+        nodesxsample=nodesxsample, prop_dist=prop_dist)
 
     counter = 0
     for i in range(n_tries):
@@ -133,6 +135,21 @@ def main():
         args, device, dataset_info, dataloaders['train'])
     flow.to(device)
 
+    data_dummy = next(iter(dataloaders['train']))
+
+
+    if len(args.conditioning) > 0:
+        print(f'Conditioning on {args.conditioning}')
+        property_norms = compute_mean_mad(dataloaders, args.conditioning, args.dataset)
+        context_dummy = prepare_context(args.conditioning, data_dummy, property_norms)
+        context_node_nf = context_dummy.size(2)
+        args.context_node_nf = context_node_nf
+
+
+    if len(args.conditioning) > 0:
+        prop_dist.set_normalizer(property_norms)
+
+
     fn = 'generative_model_ema.npy' if args.ema_decay > 0 else 'generative_model.npy'
     flow_state_dict = torch.load(join(eval_args.model_path, fn),
                                  map_location=device)
@@ -142,12 +159,12 @@ def main():
     print('Sampling handful of molecules.')
     sample_different_sizes_and_save(
         args, eval_args, device, flow, nodes_dist,
-        dataset_info=dataset_info, n_samples=30)
+        dataset_info=dataset_info, n_samples=30, prop_dist=prop_dist)
 
     print('Sampling stable molecules.')
     sample_only_stable_different_sizes_and_save(
         args, eval_args, device, flow, nodes_dist,
-        dataset_info=dataset_info, n_samples=10, n_tries=2*10)
+        dataset_info=dataset_info, n_samples=10, n_tries=2*10, prop_dist=None)
     print('Visualizing molecules.')
     vis.visualize(
         join(eval_args.model_path, 'eval/molecules/'), dataset_info,
@@ -157,7 +174,7 @@ def main():
     save_and_sample_chain(
         args, eval_args, device, flow,
         n_tries=eval_args.n_tries, n_nodes=eval_args.n_nodes,
-        dataset_info=dataset_info)
+        dataset_info=dataset_info, prop_dist=prop_dist)
 
 
 if __name__ == "__main__":

@@ -29,7 +29,13 @@ def get_model(args, device, dataset_info, dataloader_train):
         attention=args.attention, tanh=args.tanh, mode=args.model, norm_constant=args.norm_constant,
         inv_sublayers=args.inv_sublayers, sin_embedding=args.sin_embedding,
         normalization_factor=args.normalization_factor, aggregation_method=args.aggregation_method)
+    
+    if 'classifier_free_guidance' not in args:
+        args.classifier_free_guidance = False
+        args.guidance_weight = 0
+        args.class_drop_prob = 0
 
+    
     if args.probabilistic_model == 'diffusion':
         vdm = EnVariationalDiffusion(
             dynamics=net_dynamics,
@@ -40,7 +46,10 @@ def get_model(args, device, dataset_info, dataloader_train):
             noise_precision=args.diffusion_noise_precision,
             loss_type=args.diffusion_loss_type,
             norm_values=args.normalize_factors,
-            include_charges=args.include_charges
+            include_charges=args.include_charges,
+            classifier_free_guidance=args.classifier_free_guidance,
+            guidance_weight=args.guidance_weight,
+            class_drop_prob=args.class_drop_prob,
             )
 
         return vdm, nodes_dist, prop_dist
