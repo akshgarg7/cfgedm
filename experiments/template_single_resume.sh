@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=job_alpha
-#SBATCH --output=./logs/job_alpha_%j.out
-#SBATCH --error=./logs/job_alpha_%j.err
+#SBATCH --job-name=job_PROPERTY
+#SBATCH --output=./logs/job_PROPERTY_%j.out
+#SBATCH --error=./logs/job_PROPERTY_%j.err
 #SBATCH --time=2-00:00:00
 #SBATCH --mem=16G
 #SBATCH --partition=atlas

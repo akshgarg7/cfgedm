@@ -491,6 +491,7 @@ class EnVariationalDiffusion(torch.nn.Module):
         # Computes sqrt(sigma_0^2 / alpha_0^2)
         sigma_x = self.SNR(-0.5 * gamma_0).unsqueeze(1)
         if self.classifier_guidance:
+            # breakpoint()
             masked_context = torch.zeros_like(context)
             net_out = (1 + self.w) * self.phi(z0, zeros, node_mask, edge_mask, context) - self.w * self.phi(z0, zeros, node_mask, edge_mask, masked_context)
         else:
@@ -741,6 +742,7 @@ class EnVariationalDiffusion(torch.nn.Module):
 
         # Neural net prediction.
         if self.classifier_guidance:
+            # breakpoint()
             masked_context = torch.zeros_like(context)
             eps_t = (1 + self.w) * self.phi(zt, t, node_mask, edge_mask, context) - self.w * self.phi(zt, t, node_mask, edge_mask, masked_context)
         else:

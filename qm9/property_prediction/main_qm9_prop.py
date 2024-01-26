@@ -129,6 +129,7 @@ def test(model, epoch, loader, mean, mad, property, device, log_interval, debug_
     return train(model, epoch, loader, mean, mad, property, device, partition='test', log_interval=log_interval, debug_break=debug_break, use_wandb=use_wandb, exp_name=exp_name, use_multiprop=use_multiprop)
 
 def get_model(args):
+    args.node_attr = 0
     if args.model_name == 'egnn':
         model = EGNN(in_node_nf=5, in_edge_nf=0, hidden_nf=args.nf, device=args.device, n_layers=args.n_layers,
                      coords_weight=1.0,

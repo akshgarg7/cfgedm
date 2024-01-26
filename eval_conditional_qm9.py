@@ -139,6 +139,9 @@ def main_quantitative(args):
 
     dataloaders = get_dataloader(args_gen)
     property_norms = compute_mean_mad(dataloaders, args_gen.conditioning, args_gen.dataset)
+    if args.override_guidance:
+        args_gen.guidance_weight = args.override_guidance
+
     model, nodes_dist, prop_dist, _ = get_generator(args.generators_path, dataloaders,
                                                     args.device, args_gen, property_norms)
 
@@ -221,6 +224,7 @@ if __name__ == "__main__":
                         help='naive, edm, qm9_second_half, qualitative')
     parser.add_argument('--n_sweeps', type=int, default=10,
                         help='number of sweeps for the qualitative conditional experiment')
+    parser.add_argument('--override_guidance', type=float, help='Whether or not to override the guidance weight parameter')
     parser.add_argument('--use_wandb', action='store_true', help='Enable wandb logging of classifier')
     parser.add_argument('--use_multiprop', action='store_true', help="Classifier is being run on a multiproperty conditional model")
 
@@ -229,6 +233,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if args.cuda else "cpu")
     args.device = device
 
+    
     if args.task == 'qualitative':
         main_qualitative(args)
     else:
