@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=eval_PROPERTY_GUIDANCE_WEIGHT_
-#SBATCH --output=./logs/eval_PROPERTY_GUIDANCE_WEIGHT_%j.out
-#SBATCH --error=./logs/eval_PROPERTY_GUIDANCE_WEIGHT_%j.err
+#SBATCH --job-name=eval_PROPERTY_resume_GUIDANCE_WEIGHT_
+#SBATCH --output=./logs/eval_PROPERTY_resume_GUIDANCE_WEIGHT_%j.out
+#SBATCH --error=./logs/eval_PROPERTY_resume_GUIDANCE_WEIGHT_%j.err
 #SBATCH --time=2-00:00:00
 #SBATCH --mem=16G
 #SBATCH --partition=atlas
@@ -16,10 +16,10 @@ cd /atlas/u/akshgarg/cfgedm/
 # Activate the Conda environment
 conda activate torch3.7
 
-python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY \
+python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY_resume \
                                --classifiers_path pretrained/evaluate_PROPERTY \
                                --property PROPERTY  \
-                               --iterations 10  \
+                               --iterations 25  \
                                --batch_size BATCH_SIZE \
                                --task edm \
                                --use_wandb \

@@ -6,6 +6,7 @@ command = "nvidia-smi --query-gpu=name,memory.total --format=csv"
 
 parser = argparse.ArgumentParser(description='Launcher')
 parser.add_argument('--launch', action='store_true', default=False)
+parser.add_argument('--resume', action='store_true', default=False)
 args = parser.parse_args()
 
 # Run the command and capture the output
@@ -29,7 +30,7 @@ try:
     batch_size_at_16GB = 256
     batch_size = int(batch_size_at_16GB * total_memory / scale)
     batch_size = batch_size - batch_size % 32
-    BATCH_SIZE = str(batch_size)
+    BATCH_SIZE = str(int(batch_size))
 
 except subprocess.CalledProcessError as e:
     print("An error occurred while trying to retrieve GPU information.")
@@ -37,15 +38,11 @@ except subprocess.CalledProcessError as e:
 
 import os
 
-def create_job_file(property, guidance=0.25):
-    job_name = f"eval_{property}"
-    input_file = 'experiments/template_evals.sh'
-    output_file = f'job_drafts/evals_{property}_w_{guidance}.sh'
-
+def create_job_file(property, input_file, output_file, guidance=0.25, ):
     with open(input_file, 'r') as file:
         content = file.read()
     
-    exp_name = f"eval_{property}_w_{guidance}"
+    exp_name = f"full_scale_eval_{property}_w_{guidance}"
     content = content.replace("PROPERTY", property)
     content = content.replace("BATCH_SIZE", BATCH_SIZE)
     content = content.replace("GUIDANCE_WEIGHT", guidance)
@@ -59,11 +56,17 @@ def create_job_file(property, guidance=0.25):
     # os.remove(f'experiments/temp_job_{property}.sh')
 
 properties = ['alpha', 'homo', 'lumo', 'gap', 'mu', 'Cv']
-guidance_weights = [0.1, 0.25, 0.5, 1]
+guidance_weights = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3.0]
 
 for property in properties:
     for guidance in guidance_weights:
-        create_job_file(property, str(guidance))
+        output_file = f'job_drafts/evals_{property}_w_{guidance}.sh'
+        input_file = 'experiments/template_evals.sh'
+        if args.resume:
+            output_file = f'job_drafts/evals_{property}_w_{guidance}_resume.sh'
+            input_file = 'experiments/template_evals_resume.sh'
+
+        create_job_file(property, input_file, output_file, str(guidance))
 
         if property == 'alpha' and args.launch:
-            os.system(f'sbatch job_drafts/evals_{property}_w_{guidance}.sh')
+            os.system(f'sbatch {output_file}')

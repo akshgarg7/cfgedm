@@ -11,19 +11,23 @@ import pickle
 import wandb
 from utils import get_wandb_username
 import pdb
+from qm9.analyze import check_stability
+import pandas as pd
 
 loss_l1 = nn.L1Loss()
 
 
 def train(model, epoch, loader, mean, mad, property, device, partition='train', optimizer=None, lr_scheduler=None, log_interval=20, debug_break=False, use_wandb=False, exp_name="multi_prop_test", use_multiprop=False):
     if use_wandb:
-        kwargs = {'name': exp_name, 'project': 'e3_diffusion_qm9', #'entity': args.wandb_usr,
+        kwargs = {'name': exp_name, 'project': 'cfgdm', #'entity': args.wandb_usr,
           'settings': wandb.Settings(_disable_stats=False), 'reinit': True}
         wandb.init(**kwargs)
         
     if partition == 'train':
         lr_scheduler.step()
     res = {'loss': 0, 'counter': 0, 'loss_arr':[]}
+    mol_stability_arr = []
+    atm_stability_arr = []
     for i, data in enumerate(loader):
         if partition == 'train':
             model.train()
@@ -33,6 +37,11 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
             model.eval()
 
         batch_size, n_nodes, _ = data['positions'].size()
+        positions_unflattened = data['positions'].to(device, torch.float32)
+        node_mask_unflattened = data['atom_mask'].to(device, torch.float32)
+        edge_mask_unflattened = data['edge_mask_unflattened'].to(device, torch.float32)
+        node_types_unflattened = data['one_hot'].to(device, torch.float32)
+
         atom_positions = data['positions'].view(batch_size * n_nodes, -1).to(device, torch.float32)
         atom_mask = data['atom_mask'].view(batch_size * n_nodes, -1).to(device, torch.float32)
         edge_mask = data['edge_mask'].to(device, torch.float32)
@@ -45,41 +54,32 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
         edges = prop_utils.get_adj_matrix(n_nodes, batch_size, device)
         label = data[property].to(device, torch.float32)
 
-        '''
-        print("Positions mean")
-        print(torch.mean(torch.abs(atom_positions)))
-        print("Positions max")
-        print(torch.max(atom_positions))
-        print("Positions min")
-        print(torch.min(atom_positions))
+        molecule_stable = 0
+        nr_stable_bonds = 0
+        n_atoms = 0
+        for index in range(0, batch_size):
+            num_atoms = int(node_mask_unflattened[index].sum().item())
+            atom_type = node_types_unflattened[index][:num_atoms].cpu().detach().numpy()
+            atom_type = atom_type.argmax(axis=1)
+            x_squeeze = positions_unflattened[index][:num_atoms].squeeze(0).cpu().detach().numpy()
+            validity_results = check_stability(x_squeeze, atom_type, loader.dataset_info)
+            molecule_stable += int(validity_results[0])
+            nr_stable_bonds += int(validity_results[1])
+            n_atoms += int(validity_results[2])
 
+        # print("Molecule stable")
+        mol_stability = molecule_stable / batch_size
+        atm_stability = nr_stable_bonds / n_atoms
+        # print(f"Molecular stability: {mol_stability}")
+        # print(f"Atom stability: {atm_stability}")
 
-        print("\nOne hot mean")
-        print(torch.mean(torch.abs(nodes)))
-        print("one_hot max")
-        print(torch.max(nodes))
-        print("one_hot min")
-        print(torch.min(nodes))
-
-
-        print("\nLabel mean")
-        print(torch.mean(torch.abs(label)))
-        print("label max")
-        print(torch.max(label))
-        print("label min")
-        print(torch.min(label))
-        '''
+        wandb.log({'Molecular stability': mol_stability}, commit=True)
+        mol_stability_arr.append(mol_stability)
+        wandb.log({'Atom stability': atm_stability}, commit=True)
+        atm_stability_arr.append(atm_stability)
 
         pred = model(h0=nodes, x=atom_positions, edges=edges, edge_attr=None, node_mask=atom_mask, edge_mask=edge_mask,
                      n_nodes=n_nodes)
-
-
-        # print("\nPred mean")
-        # print(torch.mean(torch.abs(pred)))
-        # print("Pred max")
-        # print(torch.max(pred))
-        # print("Pred min")
-        # print(torch.min(pred))
 
        # TODO: Come back to check if this is correct, temporary hack for validation
         if partition == 'train':
@@ -105,8 +105,12 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
             res['loss_arr'].append(loss.item())
         else:
             if use_multiprop:
+               if use_wandb:
+                    wandb.log({'MAE': min(loss_1.item(), loss_2.item())}, commit=True)
                res['loss_arr'].append(min(loss_1.item(), loss_2.item()))
             else:
+               if use_wandb:
+                    wandb.log({'MAE': loss.item()}, commit=True)
                res['loss_arr'].append(loss.item())
 
 
@@ -115,12 +119,25 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
             prefix = ">> %s \t" % partition
 
         if i % log_interval == 0:
-            print(prefix + "Epoch %d \t Iteration %d \t loss %.4f" % (epoch, i, sum(res['loss_arr'][-10:])/len(res['loss_arr'][-10:])))
+            print(prefix + "Epoch %d \t Iteration %d \t loss %.4f \t mol stab %.4f \t atm stab %.4f" % (epoch, i, sum(res['loss_arr'][-10:])/len(res['loss_arr'][-10:]), mol_stability, atm_stability))
+            # print(prefix + "Epoch %d \t Iteration %d \t loss %.4f mol stability " % (epoch, i, sum(res['loss_arr'][-10:])/len(res['loss_arr'][-10:])))
         if debug_break:
             break
     
     if use_wandb:
-       wandb.log({'Average MAE': res['loss'] / res['counter']}, commit=True)
+       mol_stability_avg = sum(mol_stability_arr) / len(mol_stability_arr)
+       atm_stability_avg = sum(atm_stability_arr) / len(atm_stability_arr)
+       mae_avg = res['loss'] / res['counter']
+       print(f"Molecular stability avg: {mol_stability_avg}")
+       print(f"Atom stability avg: {atm_stability_avg}")
+       wandb.log({'Average MAE': mae_avg}, commit=True)
+       wandb.log({"Average Molecular Stability": mol_stability_avg}, commit=True)
+       wandb.log({"Average Atom Stability": atm_stability_avg}, commit=True)
+       paired = (mol_stability_avg, mae_avg)
+       wandb.log({"Pareto": paired}, commit=True)
+       df = pd.read_csv('experiments/pareto.csv')
+       df.loc[len(df.index)] = [loader.args_gen.guidance_weight, mol_stability_avg, mae_avg]
+       df.to_csv('experiments/pareto.csv', index=False)
     
     return res['loss'] / res['counter']
 

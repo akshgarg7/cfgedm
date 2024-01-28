@@ -90,17 +90,19 @@ class DiffusionDataloader:
         diag_mask = ~torch.eye(edge_mask.size(1), dtype=torch.bool).unsqueeze(0)
         diag_mask = diag_mask.to(self.device)
         edge_mask *= diag_mask
-        edge_mask = edge_mask.view(bs * n_nodes * n_nodes, 1)
+        edge_mask_flattened = edge_mask.view(bs * n_nodes * n_nodes, 1)
 
         prop_key = self.prop_dist.properties[0]
         if self.unkown_labels:
             context[:] = self.prop_dist.normalizer[prop_key]['mean']
         else:
             context = context * self.prop_dist.normalizer[prop_key]['mad'] + self.prop_dist.normalizer[prop_key]['mean']
+        # breakpoint()
         data = {
             'positions': x.detach(),
             'atom_mask': node_mask.detach(),
-            'edge_mask': edge_mask.detach(),
+            'edge_mask_unflattened': edge_mask.detach(),
+            'edge_mask': edge_mask_flattened.detach(),
             'one_hot': one_hot.detach(),
             prop_key: context.detach()
         }

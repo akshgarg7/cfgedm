@@ -15,6 +15,7 @@ BATCH_SIZE = None
 
 parser = argparse.ArgumentParser(description='Launcher')
 parser.add_argument('--resume', action='store_true', default=False)
+parser.add_argument('--launch', action='store_true', default=False)
 args = parser.parse_args()
 
 # Run the command and capture the output
@@ -70,11 +71,14 @@ def create_job_file(property):
     with open(output_file, 'w') as file:
         file.write(content)
 
+    if args.launch:
+        os.system(f'sbatch {output_file}')
+
     # Optional: Submit the job and/or remove the file
     # os.system(f'sbatch experiments/temp_job_{property}.sh')
     # os.remove(f'experiments/temp_job_{property}.sh')
 
-properties = ['alpha', 'homo', 'lumo', 'gap', 'mu', 'Cv']
+properties = ['homo', 'lumo', 'gap', 'mu', 'Cv']
 
 for property in properties:
     create_job_file(property)
