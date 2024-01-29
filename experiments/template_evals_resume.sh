@@ -19,7 +19,7 @@ conda activate torch3.7
 python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY_resume \
                                --classifiers_path pretrained/evaluate_PROPERTY \
                                --property PROPERTY  \
-                               --iterations 25  \
+                               --iterations 10  \
                                --batch_size BATCH_SIZE \
                                --task edm \
                                --use_wandb \

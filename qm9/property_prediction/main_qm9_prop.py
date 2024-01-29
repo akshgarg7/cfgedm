@@ -135,9 +135,14 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
        wandb.log({"Average Atom Stability": atm_stability_avg}, commit=True)
        paired = (mol_stability_avg, mae_avg)
        wandb.log({"Pareto": paired}, commit=True)
-       df = pd.read_csv('experiments/pareto.csv')
+
+       if not os.path.exists(f'experiments/pareto/{property}.csv'):
+           df = pd.DataFrame(columns=['guidance_weight', 'mol_stability', 'mae'])
+           df.to_csv(f'experiments/pareto/{property}.csv', index=False)
+
+       df = pd.read_csv(f'experiments/pareto/{property}.csv')
        df.loc[len(df.index)] = [loader.args_gen.guidance_weight, mol_stability_avg, mae_avg]
-       df.to_csv('experiments/pareto.csv', index=False)
+       df.to_csv(f'experiments/pareto/{property}.csv', index=False)
     
     return res['loss'] / res['counter']
 
