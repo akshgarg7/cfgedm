@@ -10,10 +10,10 @@ import qm9.utils as qm9utils
 from qm9 import losses
 import time
 import torch
-
+from qm9.fingerprint import compute_fingerprint_bits, tanimoto  
 
 def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dtype, property_norms, optim,
-                nodes_dist, gradnorm_queue, dataset_info, prop_dist):
+                nodes_dist, gradnorm_queue, dataset_info, prop_dist, use_fp=False):
     model_dp.train()
     model.train()
     nll_epoch = []
@@ -41,7 +41,11 @@ def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dt
 
         h = {'categorical': one_hot, 'integer': charges}
 
-        if len(args.conditioning) > 0:
+        # FIX FOR fp qm9 
+        if use_fp:
+            context = qm9utils.prepare_fp_context(data).to(device, dtype)
+            assert_correctly_masked(context, node_mask)
+        elif len(args.conditioning) > 0:
             context = qm9utils.prepare_context(args.conditioning, data, property_norms).to(device, dtype)
             assert_correctly_masked(context, node_mask)
         else:
@@ -75,6 +79,7 @@ def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dt
         nll_epoch.append(nll.item())
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) and not (epoch == 0 and i == 0):
             start = time.time()
+            # TO-DO: Fix for QM9 fp - how to generate sweep?
             if len(args.conditioning) > 0:
                 save_and_sample_conditional(args, device, model_ema, prop_dist, dataset_info, epoch=epoch)
             save_and_sample_chain(model_ema, args, device, dataset_info, prop_dist, epoch=epoch,
@@ -129,7 +134,10 @@ def test(args, loader, epoch, eval_model, device, dtype, property_norms, nodes_d
 
             h = {'categorical': one_hot, 'integer': charges}
 
-            if len(args.conditioning) > 0:
+            if use_fp:
+                context = qm9utils.prepare_fp_context(data).to(device, dtype)
+                assert_correctly_masked(context, node_mask)
+            elif len(args.conditioning) > 0:
                 context = qm9utils.prepare_context(args.conditioning, data, property_norms).to(device, dtype)
                 assert_correctly_masked(context, node_mask)
             else:
@@ -139,7 +147,6 @@ def test(args, loader, epoch, eval_model, device, dtype, property_norms, nodes_d
             nll, _, _ = losses.compute_loss_and_nll(args, eval_model, nodes_dist, x, h,
                                                     node_mask, edge_mask, context)
             # standard nll from forward KL
-
             nll_epoch += nll.item() * batch_size
             n_samples += batch_size
             if i % args.n_report_steps == 0:
@@ -187,6 +194,9 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
         molecules['one_hot'].append(one_hot.detach().cpu())
         molecules['x'].append(x.detach().cpu())
         molecules['node_mask'].append(node_mask.detach().cpu())
+
+    # calculate tanimoto
+    #fp_bits, _ = compute_fingerprint_bits(data["positions"], charges, data['num_atoms'])
 
     molecules = {key: torch.cat(molecules[key], dim=0) for key in molecules}
     validity_dict, rdkit_tuple = analyze_stability_for_molecules(molecules, dataset_info)

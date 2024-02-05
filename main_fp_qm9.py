@@ -17,7 +17,7 @@ from equivariant_diffusion import utils as flow_utils
 import torch
 import time
 import pickle
-from qm9.utils import prepare_context, compute_mean_mad
+from qm9.utils import prepare_context, prepare_fp_context, compute_mean_mad
 from train_test import train_epoch, test, analyze_and_save
 
 parser = argparse.ArgumentParser(description='E3Diffusion')
@@ -98,7 +98,8 @@ parser.add_argument('--num_workers', type=int, default=0, help='Number of worker
 parser.add_argument('--test_epochs', type=int, default=10)
 parser.add_argument('--data_augmentation', type=eval, default=False, help='use attention in the EGNN')
 parser.add_argument("--conditioning", nargs='+', default=[],
-                    help='arguments : homo | lumo | alpha | gap | mu | Cv' )
+                    help='arguments : homo | lumo | alpha | gap | mu | Cv | fingerprint' )
+parser.add_argument("--fp_conditioning", type=bool, default=True, help = "condition on fingerprint")
 parser.add_argument('--resume', type=str, default=None,
                     help='')
 parser.add_argument('--start_epoch', type=int, default=0,
@@ -196,7 +197,7 @@ wandb.save('*.txt')
 dataloaders, charge_scale = dataset.retrieve_dataloaders(args)
 data_dummy = next(iter(dataloaders['train']))
 
-
+"""
 if len(args.conditioning) > 0:
     print(f'Conditioning on {args.conditioning}')
     property_norms = compute_mean_mad(dataloaders, args.conditioning, args.dataset)
@@ -205,12 +206,16 @@ if len(args.conditioning) > 0:
 else:
     context_node_nf = 0
     property_norms = None
-
+"""
+print('Conditioning on fingerprints')
+context_dummy = prepare_fp_context(data_dummy)
+context_node_nf = context_dummy.size(2)
+property_norms=None
 args.context_node_nf = context_node_nf
 
 
 # Create EGNN flow
-model, nodes_dist, prop_dist = get_model(args, device, dataset_info, dataloaders['train'])
+model, nodes_dist, prop_dist = get_model(args, device, dataset_info, dataloaders['train'], use_fp=args.fp_conditioning)
 if prop_dist is not None:
     prop_dist.set_normalizer(property_norms)
 model = model.to(device)
@@ -265,7 +270,7 @@ def main():
         train_epoch(args=args, loader=dataloaders['train'], epoch=epoch, model=model, model_dp=model_dp,
                     model_ema=model_ema, ema=ema, device=device, dtype=dtype, property_norms=property_norms,
                     nodes_dist=nodes_dist, dataset_info=dataset_info,
-                    gradnorm_queue=gradnorm_queue, optim=optim, prop_dist=prop_dist)
+                    gradnorm_queue=gradnorm_queue, optim=optim, prop_dist=prop_dist, use_fp=args.fp_conditioning)
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 
         if epoch % args.test_epochs == 0:

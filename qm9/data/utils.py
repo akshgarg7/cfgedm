@@ -8,10 +8,11 @@ from torch.utils.data import DataLoader
 from qm9.data.dataset_class import ProcessedDataset
 from qm9.data.prepare import prepare_dataset
 
+from qm9.fingerprint import compute_fingerprint, compute_fingerprint_bits
 
 def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
                         force_download=False, subtract_thermo=False,
-                        remove_h=False):
+                        remove_h=False, use_fp=False):
     """
     Initialize datasets.
 
@@ -108,7 +109,17 @@ def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
             dataset['positions'] = new_positions
             dataset['charges'] = new_charges
             dataset['num_atoms'] = torch.sum(dataset['charges'] > 0, dim=1)
+    
+    if dataset=='qm9' or dataset=='qm9_second_half' or dataset=='qm9_first_half':
+        fp_1024 = compute_fingerprint(datasets['train']['positions'],datasets['train']['charges'],datasets['train']['num_atoms'])
+        datasets['train']['fp_1024'] = fp_1024
 
+        fp_1024 = compute_fingerprint(datasets['valid']['positions'],datasets['valid']['charges'],datasets['valid']['num_atoms']) 
+        datasets['valid']['fp_1024'] = fp_1024
+
+        fp_1024 = compute_fingerprint(datasets['test']['positions'],datasets['test']['charges'],datasets['test']['num_atoms'])
+        datasets['test']['fp_1024'] = fp_1024
+        
     # Get a list of all species across the entire dataset
     all_species = _get_species(datasets, ignore_check=False)
 
