@@ -79,7 +79,7 @@ def create_job_file(property1, property2):
     # os.system(f'sbatch experiments/temp_job_{property}.sh')
     # os.remove(f'experiments/temp_job_{property}.sh')
 
-properties = [('alpha', 'mu')]
+properties = [('alpha', 'mu'), ('alpha', 'homo'), ('homo', 'lumo')]
 
 for prop1, prop2 in properties:
     create_job_file(prop1, prop2)
