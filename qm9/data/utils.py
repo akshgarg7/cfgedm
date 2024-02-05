@@ -7,11 +7,13 @@ import os
 from torch.utils.data import DataLoader
 from qm9.data.dataset_class import ProcessedDataset
 from qm9.data.prepare import prepare_dataset
+from qm9.fingerprint import compute_fingerprint, compute_fingerprint_bits, tanimoto
+
 
 
 def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
                         force_download=False, subtract_thermo=False,
-                        remove_h=False):
+                        remove_h=False, use_fp=False):
     """
     Initialize datasets.
 
@@ -51,6 +53,7 @@ def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
     -----
     TODO: Delete the splits argument.
     """
+    # breakpoint()
     # Set the number of points based upon the arguments
     num_pts = {'train': args.num_train,
                'test': args.num_test, 'valid': args.num_valid}
@@ -84,6 +87,7 @@ def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
                ), 'Datasets must have same set of keys!'
 
     # TODO: remove hydrogens here if needed
+    # breakpoint()
     if remove_h:
         for key, dataset in datasets.items():
             pos = dataset['positions']
@@ -108,7 +112,32 @@ def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
             dataset['positions'] = new_positions
             dataset['charges'] = new_charges
             dataset['num_atoms'] = torch.sum(dataset['charges'] > 0, dim=1)
+    
+    if use_fp: # and (dataset=='qm9' or dataset=='qm9_second_half' or dataset=='qm9_first_half'):
+        data_size, n_nodes, feature_dims = datasets['train']['positions'].shape
+        # fp_1024 = compute_fingerprint(datasets['train']['positions'],datasets['train']['charges'],datasets['train']['num_atoms'])
+        fp_1024_shape_dummy = torch.zeros(data_size, 1024)
+        datasets['train']['fp_1024'] = fp_1024_shape_dummy
 
+        data_size = datasets['valid']['positions'].shape[0]
+        fp_1024_shape_dummy_valid = torch.zeros(1, 1024)
+        datasets['valid']['fp_1024'] = fp_1024_shape_dummy_valid
+
+        data_size = datasets['test']['positions'].shape[0]
+        fp_1024_shape_dummy_test = torch.zeros(1, 1024)
+        datasets['test']['fp_1024'] = fp_1024_shape_dummy_test
+
+
+        # datasets['train']['fp_1024'] = torch.stack(fp_1024).unsqueeze(0).repeat(1, n_nodes, 1)
+
+        # # fp_1024 = compute_fingerprint(datasets['valid']['positions'],datasets['valid']['charges'],datasets['valid']['num_atoms']) 
+        # data_size, n_nodes, feature_dims = datasets['valid']['positions'].shape
+
+        # datasets['valid']['fp_1024'] = torch.stack(fp_1024).unsqueeze(0).repeat(1, n_nodes, 1)
+
+        # # fp_1024 = compute_fingerprint(datasets['test']['positions'],datasets['test']['charges'],datasets['test']['num_atoms'])
+        # datasets['test']['fp_1024'] = torch.stack(fp_1024).unsqueeze(0).repeat(1, n_nodes, 1)
+        
     # Get a list of all species across the entire dataset
     all_species = _get_species(datasets, ignore_check=False)
 

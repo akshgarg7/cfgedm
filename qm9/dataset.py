@@ -13,10 +13,12 @@ def retrieve_dataloaders(cfg):
         # Initialize dataloader
         args = init_argparse('qm9')
         # data_dir = cfg.data_root_dir
+        # breakpoint()
+        breakpoint()
         args, datasets, num_species, charge_scale = initialize_datasets(args, cfg.datadir, cfg.dataset,
                                                                         subtract_thermo=args.subtract_thermo,
                                                                         force_download=args.force_download,
-                                                                        remove_h=cfg.remove_h)
+                                                                        remove_h=cfg.remove_h, use_fp=cfg.fp_conditioning)
         qm9_to_eV = {'U0': 27.2114, 'U': 27.2114, 'G': 27.2114, 'H': 27.2114, 'zpve': 27211.4, 'gap': 27.2114, 'homo': 27.2114,
                      'lumo': 27.2114}
 

@@ -25,7 +25,7 @@ python main_qm9.py --exp_name single_cfg_alpha_homo \
                    --save_model True \
                    --diffusion_steps 1000 \
                    --sin_embedding False \
-                   --n_epochs 3000 \
+                   --n_epochs 2 \
                    --n_stability_samples 500 \
                    --diffusion_noise_schedule polynomial_2 \
                    --diffusion_noise_precision 1e-5 \
@@ -38,6 +38,6 @@ python main_qm9.py --exp_name single_cfg_alpha_homo \
                    --classifier_free_guidance \
                    --resume pretrained/cEDM_alpha_homo \
                    --guidance_weight 0.25 \
-                   --test_epochs 100 \
+                   --test_epochs 1 \
                    --class_drop_prob 0.1 \
                    --normalize_factors [1,8,1] \
