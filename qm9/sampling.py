@@ -131,6 +131,7 @@ def sample(args, device, generative_model, dataset_info,
     if args.context_node_nf > 0:
         if context is None:
             context = prop_dist.sample_batch(nodesxsample)
+        # breakpoint()
         context = context.unsqueeze(1).repeat(1, max_n_nodes, 1).to(device) * node_mask
     else:
         context = None

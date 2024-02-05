@@ -79,6 +79,13 @@ class DiffusionDataloader:
     def sample(self):
         nodesxsample = self.nodes_dist.sample(self.batch_size)
         context = self.prop_dist.sample_batch(nodesxsample).to(self.device)
+
+        # Commenting to make the same as how EEGSDE handles it. No special handling for the other property        
+        # property_to_control = args.property 
+        # property_index = self.prop_dist.properties.index(property_to_control)
+        # property_skip = [i for i in range(len(self.prop_dist.properties)) if i != property_index]
+        # context[:, property_skip] = 0
+
         one_hot, charges, x, node_mask = sample(self.args_gen, self.device, self.model,
                                                 self.dataset_info, self.prop_dist, nodesxsample=nodesxsample,
                                                 context=context)
@@ -94,11 +101,18 @@ class DiffusionDataloader:
         edge_mask *= diag_mask
         edge_mask_flattened = edge_mask.view(bs * n_nodes * n_nodes, 1)
 
-        prop_key = self.prop_dist.properties[0]
-        if self.unkown_labels:
-            context[:] = self.prop_dist.normalizer[prop_key]['mean']
-        else:
-            context = context * self.prop_dist.normalizer[prop_key]['mad'] + self.prop_dist.normalizer[prop_key]['mean']
+        # Instead of just applying the transform to the first property, we apply it to all properties
+        # prop_key = self.prop_dist.properties[0]
+        for i in range(len(self.prop_dist.properties)):
+            key = self.prop_dist.properties[i]
+            context[:, i] = context[:, i] * self.prop_dist.normalizer[key]['mad'] + self.prop_dist.normalizer[key]['mean']
+            # context_unorm[key] = context_i
+
+        # for prop in self.prop_dist.properties:
+        #     if self.unkown_labels:
+        #         context[:] = self.prop_dist.normalizer[prop]['mean']
+        #     else:
+        #         context = context * self.prop_dist.normalizer[prop]['mad'] + self.prop_dist.normalizer[prop]['mean']
         # breakpoint()
         data = {
             'positions': x.detach(),
@@ -106,7 +120,7 @@ class DiffusionDataloader:
             'edge_mask_unflattened': edge_mask.detach(),
             'edge_mask': edge_mask_flattened.detach(),
             'one_hot': one_hot.detach(),
-            prop_key: context.detach()
+            args.property : context.detach()
         }
         return data
 

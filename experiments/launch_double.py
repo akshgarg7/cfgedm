@@ -83,3 +83,4 @@ properties = [('alpha', 'mu'), ('alpha', 'homo'), ('homo', 'lumo')]
 
 for prop1, prop2 in properties:
     create_job_file(prop1, prop2)
+    

@@ -29,6 +29,10 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
     mol_stability_arr = []
     atm_stability_arr = []
     mae_arr = []
+
+    prop_dist = loader.prop_dist 
+    property_index = prop_dist.properties.index(property)
+
     for i, data in enumerate(loader):
         if partition == 'train':
             model.train()
@@ -45,7 +49,8 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
 
         atom_positions = data['positions'].view(batch_size * n_nodes, -1).to(device, torch.float32)
         atom_mask = data['atom_mask'].view(batch_size * n_nodes, -1).to(device, torch.float32)
-        edge_mask = data['edge_mask'].to(device, torch.float32)
+        edge_mask = data['edge_mask'].to(device, t
+                                         orch.float32)
         nodes = data['one_hot'].to(device, torch.float32)
         #charges = data['charges'].to(device, dtype).squeeze(2)
         #nodes = prop_utils.preprocess_input(one_hot, charges, args.charge_power, charge_scale, device)
@@ -53,6 +58,7 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
         nodes = nodes.view(batch_size * n_nodes, -1)
         # nodes = torch.cat([one_hot, charges], dim=1)
         edges = prop_utils.get_adj_matrix(n_nodes, batch_size, device)
+        # breakpoint()
         label = data[property].to(device, torch.float32)
 
         molecule_stable = 0
@@ -82,6 +88,8 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
         pred = model(h0=nodes, x=atom_positions, edges=edges, edge_attr=None, node_mask=atom_mask, edge_mask=edge_mask,
                      n_nodes=n_nodes)
 
+        label = label[:, property_index]
+
        # TODO: Come back to check if this is correct, temporary hack for validation
         if partition == 'train':
             loss = loss_l1(pred, (label - mean) / mad)
@@ -90,15 +98,19 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
             print('error')
         else:
             if use_multiprop:
-               loss_1 = loss_l1(mad * pred + mean, label[:, 0])
-               loss_2 = loss_l1(mad * pred + mean, label[:, 1])
+                # label = label[:, property_index]
+                loss = loss_l1(mad * pred + mean, label)
+            #    loss_1 = loss_l1(mad * pred + mean, label[:, 0])
+            #    loss_2 = loss_l1(mad * pred + mean, label[:, 1])
             else:
+               
                loss = loss_l1(mad * pred + mean, label)
 
-        if use_multiprop:
-            res['loss'] += min(loss_1.item() * batch_size, loss_2.item() * batch_size)
-        else:
-            res['loss'] += loss.item() * batch_size
+        res['loss'] += loss.item() * batch_size
+        # if use_multiprop:
+        #     res['loss'] += min(loss_1.item() * batch_size, loss_2.item() * batch_size)
+        # else:
+        #     res['loss'] += loss.item() * batch_size
 
 
         res['counter'] += batch_size
@@ -106,16 +118,16 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
         if partition == "train":
             res['loss_arr'].append(loss.item())
         else:
-            if use_multiprop:
-               if use_wandb:
-                    mae = min(loss_1.item(), loss_2.item())
-                    wandb.log({'MAE': min(loss_1.item(), loss_2.item())}, commit=True)
-               res['loss_arr'].append(min(loss_1.item(), loss_2.item()))
-            else:
-               if use_wandb:
-                    mae = loss.item()
-                    wandb.log({'MAE': loss.item()}, commit=True)
-               res['loss_arr'].append(loss.item())
+            # if use_multiprop:
+            #    if use_wandb:
+            #         mae = min(loss_1.item(), loss_2.item())
+            #         wandb.log({'MAE': min(loss_1.item(), loss_2.item())}, commit=True)
+            #    res['loss_arr'].append(min(loss_1.item(), loss_2.item()))
+            # else:
+            if use_wandb:
+                mae = loss.item()
+                wandb.log({'MAE': loss.item()}, commit=True)
+            res['loss_arr'].append(loss.item())
 
         mae_arr.append(mae)
         prefix = ""
