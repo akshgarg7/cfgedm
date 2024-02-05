@@ -119,12 +119,17 @@ def main():
                         help='Specify model path')
     parser.add_argument('--save_to_xyz', type=eval, default=False,
                         help='Should save samples to xyz files.')
+    parser.add_argument('--ckpt', type=str, default=None,
+                        help='Specify model path')
 
     eval_args, unparsed_args = parser.parse_known_args()
 
     assert eval_args.model_path is not None
 
-    with open(join(eval_args.model_path, 'args.pickle'), 'rb') as f:
+    args_file = 'args.pickle'
+    if args.ckpt:
+        args_file = f"args_{args.ckpt}.pickle"
+    with open(join(eval_args.model_path, args_file), 'rb') as f:
         args = pickle.load(f)
 
     # CAREFUL with this -->

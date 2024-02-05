@@ -28,6 +28,7 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
     res = {'loss': 0, 'counter': 0, 'loss_arr':[]}
     mol_stability_arr = []
     atm_stability_arr = []
+    mae_arr = []
     for i, data in enumerate(loader):
         if partition == 'train':
             model.train()
@@ -86,6 +87,7 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
             loss = loss_l1(pred, (label - mean) / mad)
             loss.backward()
             optimizer.step()
+            print('error')
         else:
             if use_multiprop:
                loss_1 = loss_l1(mad * pred + mean, label[:, 0])
@@ -106,20 +108,23 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
         else:
             if use_multiprop:
                if use_wandb:
+                    mae = min(loss_1.item(), loss_2.item())
                     wandb.log({'MAE': min(loss_1.item(), loss_2.item())}, commit=True)
                res['loss_arr'].append(min(loss_1.item(), loss_2.item()))
             else:
                if use_wandb:
+                    mae = loss.item()
                     wandb.log({'MAE': loss.item()}, commit=True)
                res['loss_arr'].append(loss.item())
 
-
+        mae_arr.append(mae)
         prefix = ""
         if partition != 'train':
             prefix = ">> %s \t" % partition
 
+        # print(log_interval)
         if i % log_interval == 0:
-            print(prefix + "Epoch %d \t Iteration %d \t loss %.4f \t mol stab %.4f \t atm stab %.4f" % (epoch, i, sum(res['loss_arr'][-10:])/len(res['loss_arr'][-10:]), mol_stability, atm_stability))
+            print(prefix + "Epoch %d \t Iteration %d \t loss %.4f \t mae %.4f \t mol stab %.4f \t atm stab %.4f" % (epoch, i, sum(res['loss_arr'][-10:])/len(res['loss_arr'][-10:]), mae, mol_stability, atm_stability))
             # print(prefix + "Epoch %d \t Iteration %d \t loss %.4f mol stability " % (epoch, i, sum(res['loss_arr'][-10:])/len(res['loss_arr'][-10:])))
         if debug_break:
             break
@@ -127,6 +132,7 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
     if use_wandb:
        mol_stability_avg = sum(mol_stability_arr) / len(mol_stability_arr)
        atm_stability_avg = sum(atm_stability_arr) / len(atm_stability_arr)
+
        mae_avg = res['loss'] / res['counter']
        print(f"Molecular stability avg: {mol_stability_avg}")
        print(f"Atom stability avg: {atm_stability_avg}")
@@ -136,11 +142,11 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
        paired = (mol_stability_avg, mae_avg)
        wandb.log({"Pareto": paired}, commit=True)
 
-       if not os.path.exists(f'experiments/pareto/{property}.csv'):
+       if not os.path.exists(f'experiments/pareto/{property}_target.csv'):
            df = pd.DataFrame(columns=['guidance_weight', 'mol_stability', 'mae'])
-           df.to_csv(f'experiments/pareto/{property}.csv', index=False)
+           df.to_csv(f'experiments/pareto/{property}_target.csv', index=False)
 
-       df = pd.read_csv(f'experiments/pareto/{property}.csv')
+       df = pd.read_csv(f'experiments/pareto/{property}_target.csv')
        df.loc[len(df.index)] = [loader.args_gen.guidance_weight, mol_stability_avg, mae_avg]
        df.to_csv(f'experiments/pareto/{property}.csv', index=False)
     

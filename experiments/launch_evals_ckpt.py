@@ -1,5 +1,6 @@
 import subprocess
 import argparse
+from best_ckpts import gen_file
 
 # Command to get GPU information
 command = "nvidia-smi --query-gpu=name,memory.total --format=csv"
@@ -38,15 +39,16 @@ except subprocess.CalledProcessError as e:
 
 import os
 
-def create_job_file(property, input_file, output_file, guidance=0.25, ):
+def create_job_file(property, input_file, output_file, epoch, guidance=0.25):
     with open(input_file, 'r') as file:
         content = file.read()
     
-    exp_name = f"full_scale_eval_{property}_w_{guidance}"
+    exp_name = f"full_scale_eval_{property}_w_{guidance}_ckpt_{epoch}"
     content = content.replace("PROPERTY", property)
     content = content.replace("BATCH_SIZE", BATCH_SIZE)
-    content = content.replace("GUIDANCE_WEIGHT", guidance)
+    content = content.replace("GUIDANCE_WEIGHT", str(guidance))
     content = content.replace("EXP_NAME", exp_name)
+    content = content.replace("CKPT", str(epoch))
 
     with open(output_file, 'w') as file:
         file.write(content)
@@ -56,19 +58,27 @@ def create_job_file(property, input_file, output_file, guidance=0.25, ):
     # os.remove(f'experiments/temp_job_{property}.sh')
 
 # properties = ['mu', 'homo', 'lumo', 'gap', 'Cv']
-properties = ['mu', 'homo', 'lumo', 'gap', 'Cv']
+properties = ['Cv']
+# epochs = [13, 15, 17, 20, 21, 26]
+# epochs = epochs[::-1]
+# epochs = [x * 100 for x in epochs]
+
 # guidance_weights = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3.0]
 guidance_weights = [0.5, 1, 1.5, 2, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+# guidance_weights = [5.5, 6, 6.5, 7, 7.5]
+# guidance_weights = [x-0.25 for x in guidance_weights] + guidance_weights
 
 for property in properties:
-    for guidance in guidance_weights:
-        output_file = f'job_drafts/evals_{property}_w_{guidance}.sh'
-        input_file = 'experiments/template_evals.sh'
-        if args.resume:
-            output_file = f'job_drafts/evals_{property}_w_{guidance}_resume.sh'
-            input_file = 'experiments/template_evals_resume.sh'
+    epochs = gen_file(property)[-5:]
+    for epoch in epochs:
+        for guidance in guidance_weights:
+            output_file = f'job_drafts/ckpt_launches/evals_{property}_w_{guidance}.sh'
+            input_file = 'experiments/template_evals_ckpt.sh'
+            if args.resume:
+                output_file = f'job_drafts/ckpt_launches/evals_{property}_w_{guidance}_{epoch}_resume.sh'
+                input_file = 'experiments/template_evals_resume_ckpt.sh'
 
-        create_job_file(property, input_file, output_file, str(guidance))
+            create_job_file(property, input_file, output_file, epoch, str(guidance))
 
-        if args.launch:
-            os.system(f'sbatch {output_file}')
+            if args.launch:
+                os.system(f'sbatch {output_file}')

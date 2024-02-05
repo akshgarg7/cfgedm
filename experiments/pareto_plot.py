@@ -2,24 +2,25 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Read the data
-df = pd.read_csv('experiments/pareto.csv')
-print(df)
-df = df.drop_duplicates(subset=['Guidance weight'], keep='last')
-print(df)
+for property in ['alpha', 'mu', 'homo', 'lumo', 'gap', 'Cv']:
+    df = pd.read_csv(f'experiments/pareto/{property}.csv')
+    print(df)
+    df = df.drop_duplicates(subset=['guidance_weight'], keep='last')
+    print(df)
 
-cols = ['Guidance weight','Molecular Stability', 'MAE']
+    cols = ['guidance_weight','mol_stability', 'mae']
 
-df.sort_values(by=['Guidance weight'], inplace=True)
-print(df)
-# Plot the data
-plt.scatter(df['MAE'], df['Molecular Stability'])
-plt.xlabel('MAE')
-plt.ylabel('Molecular Stability')
-plt.title('MAE vs Molecular Stability')
+    df.sort_values(by=['guidance_weight'], inplace=True)
+    print(df)
+    # Plot the data
+    plt.scatter(df['mae'], df['mol_stability'])
+    plt.xlabel('mae')
+    plt.ylabel('mol_stability')
+    plt.title('mae vs mol_stability')
 
-# Add the labels
-for i, txt in enumerate(df['Guidance weight']):
-    plt.annotate(txt, (df['MAE'].iloc[i], df['Molecular Stability'].iloc[i]))
+    # Add the labels
+    for i, txt in enumerate(df['guidance_weight']):
+        plt.annotate(txt, (df['mae'].iloc[i], df['mol_stability'].iloc[i]))
 
-# Save the plot
-plt.savefig('pareto.png')
+    # Save the plot
+    plt.savefig(f'{property}_pareto.png')

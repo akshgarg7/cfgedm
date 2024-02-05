@@ -38,10 +38,12 @@ def get_args_gen(dir_path):
     return args_gen
 
 
-def get_generator(dir_path, dataloaders, device, args_gen, property_norms):
+def get_generator(dir_path, dataloaders, device, args_gen, property_norms, ckpt=None):
     dataset_info = get_dataset_info(args_gen.dataset, args_gen.remove_h)
     model, nodes_dist, prop_dist = get_model(args_gen, device, dataset_info, dataloaders['train'])
     fn = 'generative_model_ema.npy' if args_gen.ema_decay > 0 else 'generative_model.npy'
+    if ckpt:
+        fn =f"generative_model_{ckpt}.npy" if args_gen.ema_decay > 0 else f"generative_model_{ckpt}.npy"
     model_state_dict = torch.load(join(dir_path, fn), map_location='cpu')
     model.load_state_dict(model_state_dict)
 
@@ -144,8 +146,9 @@ def main_quantitative(args):
     if args.override_guidance:
         args_gen.guidance_weight = args.override_guidance
 
+    
     model, nodes_dist, prop_dist, _ = get_generator(args.generators_path, dataloaders,
-                                                    args.device, args_gen, property_norms)
+                                                    args.device, args_gen, property_norms, ckpt=args.ckpt)
 
     # Create a dataloader with the generator
 
@@ -198,7 +201,7 @@ def main_qualitative(args):
     property_norms = compute_mean_mad(dataloaders, args_gen.conditioning, args_gen.dataset)
     model, nodes_dist, prop_dist, dataset_info = get_generator(args.generators_path,
                                                                dataloaders, args.device, args_gen,
-                                                               property_norms)
+                                                               property_norms, ckpt=args_gen.ckpt)
 
     for i in range(args.n_sweeps):
         print("Sampling sweep %d/%d" % (i+1, args.n_sweeps))
@@ -229,6 +232,7 @@ if __name__ == "__main__":
     parser.add_argument('--override_guidance', type=float, help='Whether or not to override the guidance weight parameter')
     parser.add_argument('--use_wandb', action='store_true', help='Enable wandb logging of classifier')
     parser.add_argument('--use_multiprop', action='store_true', help="Classifier is being run on a multiproperty conditional model")
+    parser.add_argument('--ckpt', type=int, default=None, help='Checkpoint number to load')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
