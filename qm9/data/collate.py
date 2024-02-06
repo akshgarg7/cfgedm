@@ -76,8 +76,9 @@ class PreprocessQM9:
         batch : dict of Pytorch tensors
             The collated data.
         """
+        
         batch = {prop: batch_stack([mol[prop] for mol in batch]) for prop in batch[0].keys()}
-
+        #import pdb; pdb.set_trace()
         to_keep = (batch['charges'].sum(0) > 0)
 
         batch = {key: drop_zeros(prop, to_keep) for key, prop in batch.items()}
@@ -85,6 +86,7 @@ class PreprocessQM9:
         atom_mask = batch['charges'] > 0
         batch['atom_mask'] = atom_mask
 
+        
         #Obtain edges
         batch_size, n_nodes = atom_mask.size()
         edge_mask = atom_mask.unsqueeze(1) * atom_mask.unsqueeze(2)

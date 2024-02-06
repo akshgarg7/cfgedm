@@ -5,7 +5,7 @@ import numpy as np
 from egnn.models import EGNN_dynamics_QM9
 
 from equivariant_diffusion.en_diffusion import EnVariationalDiffusion
-
+from qm9.data.utils import compute_fingerprint
 
 def get_model(args, device, dataset_info, dataloader_train):
     histogram = dataset_info['n_nodes']
@@ -15,7 +15,6 @@ def get_model(args, device, dataset_info, dataloader_train):
     prop_dist = None
     if len(args.conditioning) > 0:
         prop_dist = DistributionProperty(dataloader_train, args.conditioning)
-
     if args.condition_time:
         dynamics_in_node_nf = in_node_nf + 1
     else:
@@ -28,7 +27,7 @@ def get_model(args, device, dataset_info, dataloader_train):
         act_fn=torch.nn.SiLU(), n_layers=args.n_layers,
         attention=args.attention, tanh=args.tanh, mode=args.model, norm_constant=args.norm_constant,
         inv_sublayers=args.inv_sublayers, sin_embedding=args.sin_embedding,
-        normalization_factor=args.normalization_factor, aggregation_method=args.aggregation_method)
+        normalization_factor=args.normalization_factor, aggregation_method=args.aggregation_method, use_fp=args.fp_conditioning)
     
     if 'classifier_free_guidance' not in args:
         args.classifier_free_guidance = False
@@ -115,8 +114,8 @@ class DistributionProperty:
         for prop in properties:
             self.distributions[prop] = {}
             self._create_prob_dist(dataloader.dataset.data['num_atoms'],
-                                   dataloader.dataset.data[prop],
-                                   self.distributions[prop])
+                                dataloader.dataset.data[prop],
+                                self.distributions[prop])
 
         self.normalizer = normalizer
 
@@ -131,7 +130,7 @@ class DistributionProperty:
             if len(values_filtered) > 0:
                 probs, params = self._create_prob_given_nodes(values_filtered)
                 distribution[n_nodes] = {'probs': probs, 'params': params}
-
+    
     def _create_prob_given_nodes(self, values):
         n_bins = self.num_bins #min(self.num_bins, len(values))
         prop_min, prop_max = torch.min(values), torch.max(values)
@@ -174,6 +173,9 @@ class DistributionProperty:
         return vals
 
     def _idx2value(self, idx, params, n_bins):
+        """
+        Given an index, returns a random value in the corresponding bin
+        """
         prop_range = params[1] - params[0]
         left = float(idx) / n_bins * prop_range + params[0]
         right = float(idx + 1) / n_bins * prop_range + params[0]

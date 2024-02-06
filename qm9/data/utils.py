@@ -8,8 +8,7 @@ from torch.utils.data import DataLoader
 from qm9.data.dataset_class import ProcessedDataset
 from qm9.data.prepare import prepare_dataset
 
-from qm9.fingerprint import compute_fingerprint, compute_fingerprint_bits
-
+from qm9.utils import compute_fingerprint
 def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
                         force_download=False, subtract_thermo=False,
                         remove_h=False, use_fp=False):
@@ -110,16 +109,29 @@ def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
             dataset['charges'] = new_charges
             dataset['num_atoms'] = torch.sum(dataset['charges'] > 0, dim=1)
     
+    """
     if dataset=='qm9' or dataset=='qm9_second_half' or dataset=='qm9_first_half':
+        num_train, n_nodes, _ = datasets['train']['positions'].size()
         fp_1024 = compute_fingerprint(datasets['train']['positions'],datasets['train']['charges'],datasets['train']['num_atoms'])
-        datasets['train']['fp_1024'] = fp_1024
+        datasets['train']['fp_1024'] = torch.stack(fp_1024).view(num_train, 1, -1).repeat(1, n_nodes, 1)
+        import pdb; pdb.set_trace()            
 
+        num_valid, n_nodes, _ = datasets['valid']['positions'].size()
         fp_1024 = compute_fingerprint(datasets['valid']['positions'],datasets['valid']['charges'],datasets['valid']['num_atoms']) 
-        datasets['valid']['fp_1024'] = fp_1024
-
-        fp_1024 = compute_fingerprint(datasets['test']['positions'],datasets['test']['charges'],datasets['test']['num_atoms'])
-        datasets['test']['fp_1024'] = fp_1024
+        datasets['valid']['fp_1024'] = torch.stack(fp_1024).view(num_valid, 1, -1).repeat(1, n_nodes, 1)
         
+        num_test, n_nodes, _ = datasets['test']['positions'].size()
+        fp_1024 = compute_fingerprint(datasets['test']['positions'],datasets['test']['charges'],datasets['test']['num_atoms'])
+        datasets['test']['fp_1024'] = torch.stack(fp_1024).view(num_test, 1, -1).repeat(1, n_nodes, 1)
+    """
+
+
+    # Hacky fix to store charges - for now, we'll just store them as charges2
+    if dataset == 'qm9' or dataset == 'qm9_second_half' or dataset == 'qm9_first_half':
+        datasets['train']['charges2'] = datasets['train']['charges']
+        datasets['valid']['charges2'] = datasets['train']['charges']
+        datasets['test']['charges2'] = datasets['train']['charges']
+
     # Get a list of all species across the entire dataset
     all_species = _get_species(datasets, ignore_check=False)
 
@@ -128,7 +140,6 @@ def initialize_datasets(args, datadir, dataset, subset=None, splits=None,
         split, -1), included_species=all_species, subtract_thermo=subtract_thermo) for split, data in datasets.items()}
 
     # Now initialize MolecularDataset based upon loaded data
-
     # Check that all datasets have the same included species:
     assert(len(set(tuple(data.included_species.tolist()) for data in datasets.values())) ==
            1), 'All datasets must have same included_species! {}'.format({key: data.included_species for key, data in datasets.items()})

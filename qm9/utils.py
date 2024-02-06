@@ -1,4 +1,5 @@
 import torch
+from qm9.fingerprint import compute_fingerprint, compute_fingerprint_bits
 
 
 def compute_mean_mad(dataloaders, properties, dataset_name):
@@ -92,18 +93,18 @@ def prepare_context(conditioning, minibatch, property_norms):
 def prepare_fp_context(minibatch):
     batch_size, n_nodes, _ = minibatch['positions'].size()
     node_mask = minibatch['atom_mask'].unsqueeze(2)
-    context_node_nf = 0
     context_list = []
-    property = torch.stack(minibatch['fp_1024'])
-    assert property.size() == (batch_size,)
-    reshaped = property.view(batch_size, 1, 1).repeat(1, n_nodes, 1)
+    #1024-fp
+    property = torch.stack(compute_fingerprint(minibatch['positions'], minibatch['charges2'])) #minibatch['num_atoms']
+    assert property.size(0) == batch_size
+    reshaped = property.view(batch_size, 1, -1).repeat(1, n_nodes, 1)
     context_list.append(reshaped)
-    context_node_nf += 1
     # Concatenate
     context = torch.cat(context_list, dim=2)
     # Mask disabled nodes!
     context = context * node_mask
-    assert context.size(2) == context_node_nf
+    # Not necessarily true anymore - 1024 fp's
+    #assert context.size(2) == context_node_nf
     return context
 
 

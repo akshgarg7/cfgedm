@@ -10,13 +10,14 @@ import qm9.utils as qm9utils
 from qm9 import losses
 import time
 import torch
-from qm9.fingerprint import compute_fingerprint_bits, tanimoto  
+from qm9.fingerprint import compute_fingerprint_bits, tanimoto, h_to_charges_qm9
 
 def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dtype, property_norms, optim,
                 nodes_dist, gradnorm_queue, dataset_info, prop_dist, use_fp=False):
     model_dp.train()
     model.train()
     nll_epoch = []
+    #tanimoto_sims = []
     n_iterations = len(loader)
     for i, data in enumerate(loader):
         x = data['positions'].to(device, dtype)
@@ -79,15 +80,26 @@ def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dt
         nll_epoch.append(nll.item())
         if (epoch % args.test_epochs == 0) and (i % args.visualize_every_batch == 0) and not (epoch == 0 and i == 0):
             start = time.time()
+            print("Sampling...")
             # TO-DO: Fix for QM9 fp - how to generate sweep?
             if len(args.conditioning) > 0:
                 save_and_sample_conditional(args, device, model_ema, prop_dist, dataset_info, epoch=epoch)
             save_and_sample_chain(model_ema, args, device, dataset_info, prop_dist, epoch=epoch,
-                                  batch_id=str(i))
+                                  batch_id=str(i), use_fp=use_fp)
             sample_different_sizes_and_save(model_ema, nodes_dist, args, device, dataset_info,
-                                            prop_dist, epoch=epoch)
-            print(f'Sampling took {time.time() - start:.2f} seconds')
-
+                                            prop_dist, epoch=epoch, use_fp=use_fp)
+            """
+            if use_fp:
+                # 10 molecules for fp calculation
+                one_hot, charges, x, node_mask = sample(args, device, model_ema, dataset_info, prop_dist,
+                                                nodesxsample=nodes_dist.sample(x.size(dim=0)), use_fp=use_fp)
+                charges = h_to_charges_qm9(one_hot.cpu().detach())
+                tanimoto_sim = tanimoto(compute_fingerprint_bits(data['positions'], data['charges2'])[0], #data['num_atoms'] 
+                                        compute_fingerprint_bits(x.cpu().detach(), charges)[0])
+                print(f"Tanimoto similarity: {tanimoto_sim}")
+                tanimoto_sims.append(tanimoto_sim)
+            """
+            print(f"Sampling took {time.time() - start} seconds.")
             vis.visualize(f"outputs/{args.exp_name}/epoch_{epoch}_{i}", dataset_info=dataset_info, wandb=wandb)
             vis.visualize_chain(f"outputs/{args.exp_name}/epoch_{epoch}_{i}/chain/", dataset_info, wandb=wandb)
             if len(args.conditioning) > 0:
@@ -97,6 +109,7 @@ def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dt
         if args.break_train_epoch:
             break
     wandb.log({"Train Epoch NLL": np.mean(nll_epoch)}, commit=False)
+   #wandb.log({"Train Epoch Tanimoto similarity": np.mean(tanimoto_sims)}, commit=False)
 
 
 def check_mask_correct(variables, node_mask):
@@ -105,7 +118,7 @@ def check_mask_correct(variables, node_mask):
             assert_correctly_masked(variable, node_mask)
 
 
-def test(args, loader, epoch, eval_model, device, dtype, property_norms, nodes_dist, partition='Test'):
+def test(args, loader, epoch, eval_model, device, dtype, property_norms, nodes_dist, partition='Test', use_fp=False):
     eval_model.eval()
     with torch.no_grad():
         nll_epoch = 0
@@ -157,9 +170,9 @@ def test(args, loader, epoch, eval_model, device, dtype, property_norms, nodes_d
 
 
 def save_and_sample_chain(model, args, device, dataset_info, prop_dist,
-                          epoch=0, id_from=0, batch_id=''):
+                          epoch=0, id_from=0, batch_id='', use_fp=False):
     one_hot, charges, x = sample_chain(args=args, device=device, flow=model,
-                                       n_tries=1, dataset_info=dataset_info, prop_dist=prop_dist)
+                                       n_tries=1, dataset_info=dataset_info, prop_dist=prop_dist, use_fp=use_fp)
 
     vis.save_xyz_file(f'outputs/{args.exp_name}/epoch_{epoch}_{batch_id}/chain/',
                       one_hot, charges, x, dataset_info, id_from, name='chain')
@@ -168,20 +181,20 @@ def save_and_sample_chain(model, args, device, dataset_info, prop_dist,
 
 
 def sample_different_sizes_and_save(model, nodes_dist, args, device, dataset_info, prop_dist,
-                                    n_samples=5, epoch=0, batch_size=100, batch_id=''):
+                                    n_samples=5, epoch=0, batch_size=100, batch_id='', use_fp=False):
     batch_size = min(batch_size, n_samples)
     for counter in range(int(n_samples/batch_size)):
         nodesxsample = nodes_dist.sample(batch_size)
         one_hot, charges, x, node_mask = sample(args, device, model, prop_dist=prop_dist,
                                                 nodesxsample=nodesxsample,
-                                                dataset_info=dataset_info)
+                                                dataset_info=dataset_info, use_fp=use_fp)
         print(f"Generated molecule: Positions {x[:-1, :, :]}")
         vis.save_xyz_file(f'outputs/{args.exp_name}/epoch_{epoch}_{batch_id}/', one_hot, charges, x, dataset_info,
                           batch_size * counter, name='molecule')
 
 
 def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info, prop_dist,
-                     n_samples=1000, batch_size=100):
+                     n_samples=1000, batch_size=100, use_fp=False):
     print(f'Analyzing molecule stability at epoch {epoch}...')
     batch_size = min(batch_size, n_samples)
     assert n_samples % batch_size == 0
@@ -189,14 +202,11 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
     for i in range(int(n_samples/batch_size)):
         nodesxsample = nodes_dist.sample(batch_size)
         one_hot, charges, x, node_mask = sample(args, device, model_sample, dataset_info, prop_dist,
-                                                nodesxsample=nodesxsample)
+                                                nodesxsample=nodesxsample, use_fp=use_fp)
 
         molecules['one_hot'].append(one_hot.detach().cpu())
         molecules['x'].append(x.detach().cpu())
         molecules['node_mask'].append(node_mask.detach().cpu())
-
-    # calculate tanimoto
-    #fp_bits, _ = compute_fingerprint_bits(data["positions"], charges, data['num_atoms'])
 
     molecules = {key: torch.cat(molecules[key], dim=0) for key in molecules}
     validity_dict, rdkit_tuple = analyze_stability_for_molecules(molecules, dataset_info)
@@ -204,6 +214,7 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
     wandb.log(validity_dict)
     if rdkit_tuple is not None:
         wandb.log({'Validity': rdkit_tuple[0][0], 'Uniqueness': rdkit_tuple[0][1], 'Novelty': rdkit_tuple[0][2]})
+    
     return validity_dict
 
 

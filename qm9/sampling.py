@@ -51,7 +51,7 @@ def reverse_tensor(x):
     return x[torch.arange(x.size(0) - 1, -1, -1)]
 
 
-def sample_chain(args, device, flow, n_tries, dataset_info, prop_dist=None):
+def sample_chain(args, device, flow, n_tries, dataset_info, prop_dist=None, use_fp=False):
     n_samples = 1
     if args.dataset == 'qm9' or args.dataset == 'qm9_second_half' or args.dataset == 'qm9_first_half':
         n_nodes = 19
@@ -61,10 +61,14 @@ def sample_chain(args, device, flow, n_tries, dataset_info, prop_dist=None):
         raise ValueError()
 
     # TODO FIX: This conditioning just zeros.
-    if args.context_node_nf > 0:
+    if args.context_node_nf > 0 and not use_fp:
         context = prop_dist.sample(n_nodes).unsqueeze(1).unsqueeze(0)
         context = context.repeat(1, n_nodes, 1).to(device)
         #context = torch.zeros(n_samples, n_nodes, args.context_node_nf).to(device)
+    elif use_fp:
+        # Randomly sample 1024 fp 
+        context = torch.randint(2, (n_samples, 1024), dtype=torch.int).unsqueeze(1)
+        context = context.repeat(1, n_nodes, 1).to(device)
     else:
         context = None
 
@@ -109,7 +113,7 @@ def sample_chain(args, device, flow, n_tries, dataset_info, prop_dist=None):
 
 def sample(args, device, generative_model, dataset_info,
            prop_dist=None, nodesxsample=torch.tensor([10]), context=None,
-           fix_noise=False):
+           fix_noise=False, use_fp=False, seed=None):
     max_n_nodes = dataset_info['max_n_nodes']  # this is the maximum node_size in QM9
 
     assert int(torch.max(nodesxsample)) <= max_n_nodes
@@ -128,15 +132,19 @@ def sample(args, device, generative_model, dataset_info,
     node_mask = node_mask.unsqueeze(2).to(device)
 
     # TODO FIX: This conditioning just zeros.
-    if args.context_node_nf > 0:
+    if args.context_node_nf > 0 and not use_fp:
         if context is None:
             context = prop_dist.sample_batch(nodesxsample)
+        context = context.unsqueeze(1).repeat(1, max_n_nodes, 1).to(device) * node_mask
+    elif use_fp and context is None:
+        # Randomly sample 1024 fp for batch
+        context = torch.randint(2, (nodesxsample.size(dim=0), 1024), dtype=torch.int)
         context = context.unsqueeze(1).repeat(1, max_n_nodes, 1).to(device) * node_mask
     else:
         context = None
 
     if args.probabilistic_model == 'diffusion':
-        x, h = generative_model.sample(batch_size, max_n_nodes, node_mask, edge_mask, context, fix_noise=fix_noise)
+        x, h = generative_model.sample(batch_size, max_n_nodes, node_mask, edge_mask, context, fix_noise=fix_noise, seed=seed)
 
         assert_correctly_masked(x, node_mask)
         assert_mean_zero_with_mask(x, node_mask)
@@ -154,18 +162,32 @@ def sample(args, device, generative_model, dataset_info,
     return one_hot, charges, x, node_mask
 
 
-def sample_sweep_conditional(args, device, generative_model, dataset_info, prop_dist, n_nodes=19, n_frames=100):
+def sample_sweep_conditional(args, device, generative_model, dataset_info, prop_dist, n_nodes=19, n_frames=100, use_fp=False, seed=None):
     nodesxsample = torch.tensor([n_nodes] * n_frames)
 
     context = []
-    for key in prop_dist.distributions:
-        min_val, max_val = prop_dist.distributions[key][n_nodes]['params']
-        mean, mad = prop_dist.normalizer[key]['mean'], prop_dist.normalizer[key]['mad']
-        min_val = (min_val - mean) / (mad)
-        max_val = (max_val - mean) / (mad)
-        context_row = torch.tensor(np.linspace(min_val, max_val, n_frames)).unsqueeze(1)
-        context.append(context_row)
-    context = torch.cat(context, dim=1).float().to(device)
+    if use_fp:
+        for i in range(n_frames):
+            context_row = torch.randint(2, (n_nodes, 1024), dtype=torch.int).unsqueeze(0)
+            context.append(context_row)
+        context = torch.cat(context, dim=0).float().to(device)
+    else:
+        for key in prop_dist.distributions:
+            min_val, max_val = prop_dist.distributions[key][n_nodes]['params']
+            mean, mad = prop_dist.normalizer[key]['mean'], prop_dist.normalizer[key]['mad']
+            min_val = (min_val - mean) / (mad)
+            max_val = (max_val - mean) / (mad)
+            context_row = torch.tensor(np.linspace(min_val, max_val, n_frames)).unsqueeze(1)
+            context.append(context_row)
+        context = torch.cat(context, dim=1).float().to(device)
 
-    one_hot, charges, x, node_mask = sample(args, device, generative_model, dataset_info, prop_dist, nodesxsample=nodesxsample, context=context, fix_noise=True)
+    one_hot, charges, x, node_mask = sample(args, device, generative_model, dataset_info, prop_dist, nodesxsample=nodesxsample, context=context, fix_noise=True, seed=seed)
+    return one_hot, charges, x, node_mask
+
+
+def sample_sweep_guidance(args, device, generative_model, dataset_info, prop_dist, context, n_nodes=19, n_frames=1, seed=None):
+    nodesxsample = torch.tensor([n_nodes] * n_frames)
+    # TODO: Verify guidance
+    
+    one_hot, charges, x, node_mask = sample(args, device, generative_model, dataset_info, prop_dist, nodesxsample=nodesxsample, context=context, fix_noise=True, seed=seed)
     return one_hot, charges, x, node_mask

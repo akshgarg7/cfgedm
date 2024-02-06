@@ -10,7 +10,7 @@ class EGNN_dynamics_QM9(nn.Module):
                  n_dims, hidden_nf=64, device='cpu',
                  act_fn=torch.nn.SiLU(), n_layers=4, attention=False,
                  condition_time=True, tanh=False, mode='egnn_dynamics', norm_constant=0,
-                 inv_sublayers=2, sin_embedding=False, normalization_factor=100, aggregation_method='sum'):
+                 inv_sublayers=2, sin_embedding=False, normalization_factor=100, aggregation_method='sum', use_fp=False):
         super().__init__()
         self.mode = mode
         if mode == 'egnn_dynamics':
@@ -34,6 +34,15 @@ class EGNN_dynamics_QM9(nn.Module):
         self.n_dims = n_dims
         self._edges_dict = {}
         self.condition_time = condition_time
+
+        self.use_fp = use_fp
+        self.fpembed = nn.Sequential(
+            nn.Linear(1024, 768),
+            nn.SiLU(),
+            nn.Linear(768, 512),
+            nn.SiLU(),
+            nn.Linear(512, hidden_nf),
+        )
 
     def forward(self, t, xh, node_mask, edge_mask, context=None):
         raise NotImplementedError
@@ -71,6 +80,9 @@ class EGNN_dynamics_QM9(nn.Module):
             h = torch.cat([h, h_time], dim=1)
 
         if context is not None:
+            if self.use_fp:
+                context = self.fpembed(context)
+                #h = h+context
             # We're conditioning, awesome!
             context = context.view(bs*n_nodes, self.context_node_nf)
             h = torch.cat([h, context], dim=1)

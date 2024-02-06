@@ -10,11 +10,11 @@
 
 mkdir -p ./logs
 
-source /sailhome/akshgarg/.bashrc
-cd /atlas/u/akshgarg/cfgedm/
+source /sailhome/snagaraj/.bashrc
+cd /atlas/u/snagaraj/cfgedm/
 
 # Activate the Conda environment
-conda activate torch3.7
+conda activate /atlas/u/akshgarg/anaconda3_copy/envs/torch3.7
 
 python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY_resume \
                                --classifiers_path pretrained/evaluate_PROPERTY \

@@ -181,7 +181,7 @@ class EGNN(nn.Module):
                                                                aggregation_method=self.aggregation_method))
         self.to(self.device)
 
-    def forward(self, h, x, edge_index, node_mask=None, edge_mask=None):
+    def forward(self, h, x, edge_index, node_mask=None, edge_mask=None, context=None):
         # Edit Emiel: Remove velocity as input
         distances, _ = coord2diff(x, edge_index)
         if self.sin_embedding is not None:

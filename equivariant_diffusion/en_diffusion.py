@@ -5,6 +5,7 @@ import torch
 from egnn import models
 from torch.nn import functional as F
 from equivariant_diffusion import utils as diffusion_utils
+import random 
 
 def mask_context(context: torch.Tensor, p_class_drop: float):
     bs, nodes, cs = context.size()
@@ -781,10 +782,20 @@ class EnVariationalDiffusion(torch.nn.Module):
         return z
 
     @torch.no_grad()
-    def sample(self, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False):
+    def sample(self, n_samples, n_nodes, node_mask, edge_mask, context, fix_noise=False, seed=None):
         """
         Draw samples from the generative model.
         """
+        print('drawing samples')
+        if fix_noise:
+            np.random.seed(seed)
+            random.seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed(seed)
+            # When running on the CuDNN backend, two further options must be set
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+            
         if fix_noise:
             # Noise is broadcasted over the batch axis, useful for visualizations.
             z = self.sample_combined_position_feature_noise(1, n_nodes, node_mask)

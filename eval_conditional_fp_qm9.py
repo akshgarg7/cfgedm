@@ -7,25 +7,18 @@ from configs.datasets_config import get_dataset_info
 from qm9 import dataset
 from qm9.utils import compute_mean_mad
 from qm9.sampling import sample
-from qm9.property_prediction.main_qm9_prop import test
+#from qm9.property_prediction.main_qm9_prop import test
 from qm9.property_prediction import main_qm9_prop
 from qm9.sampling import sample_chain, sample, sample_sweep_conditional
 import qm9.visualizer as vis
+import wandb
+from utils import get_wandb_username
+from qm9.fingerprint import compute_fingerprint_bits, tanimoto, h_to_charges_qm9
+from qm9.analyze import check_stability
+from qm9.property_prediction import prop_utils
+import pandas as pd 
+import os
 
-
-def calc_tanimoto(fp1_bitss,fp2_bitss):
-    s_sum = 0.0
-    bs = len(fp1_bitss)
-    for i in range(bs):
-        fp1_bits = fp1_bitss[i]
-        fp2_bits = fp2_bitss[i]
-        n_equal = len(fp1_bits.intersection(fp2_bits))
-        if len(fp1_bits) + len(fp2_bits) == 0:  # edge case with no set bits
-            s = 1.0
-        else:
-            s = n_equal / (len(fp1_bits)+len(fp2_bits)-n_equal)
-        s_sum += s
-    return s_sum/bs
 
 def get_args_gen(dir_path):
     with open(join(dir_path, 'args.pickle'), 'rb') as f:
@@ -40,19 +33,19 @@ def get_args_gen(dir_path):
     return args_gen
 
 
-def get_generator(dir_path, dataloaders, device, args_gen, property_norms):
+def get_generator(dir_path, dataloaders, device, args_gen, property_norms, ckpt=None):
     dataset_info = get_dataset_info(args_gen.dataset, args_gen.remove_h)
     model, nodes_dist, prop_dist = get_model(args_gen, device, dataset_info, dataloaders['train'])
+    if ckpt:
+        fn =f"generative_model_{ckpt}.npy" if args_gen.ema_decay > 0 else f"generative_model_{ckpt}.npy"
     fn = 'generative_model_ema.npy' if args_gen.ema_decay > 0 else 'generative_model.npy'
     model_state_dict = torch.load(join(dir_path, fn), map_location='cpu')
     model.load_state_dict(model_state_dict)
 
     # The following function be computes the normalization parameters using the 'valid' partition
-
     if prop_dist is not None:
         prop_dist.set_normalizer(property_norms)
     return model.to(device), nodes_dist, prop_dist, dataset_info
-
 
 def get_dataloader(args_gen):
     dataloaders, charge_scale = dataset.retrieve_dataloaders(args_gen)
@@ -121,13 +114,123 @@ class DiffusionDataloader:
         return self.iterations
 
 
+def test(model, epoch, loader, dataset_info, device, property="fp", partition='test', log_interval=20, debug_break=False, use_wandb=False, exp_name="multi_prop_test", use_multiprop=False):
+    if use_wandb:
+        kwargs = {'name': exp_name, 'project': 'cfgdm', #'entity': args.wandb_usr,
+          'settings': wandb.Settings(_disable_stats=False), 'reinit': True}
+        wandb.init(**kwargs)
+        
+    model.eval()
+    res = {'loss': 0, 'counter': 0, 'loss_arr':[]}
+    mol_stability_arr = []
+    atm_stability_arr = []
+    tanimoto_sims = []
+    for i, data in enumerate(loader):
+        """
+        edge_mask_unflattened = data['edge_mask_unflattened'].to(device, torch.float32)
+
+        atom_positions = data['positions'].view(batch_size * n_nodes, -1).to(device, torch.float32)
+        atom_mask = data['atom_mask'].view(batch_size * n_nodes, -1).to(device, torch.float32)
+        edge_mask = data['edge_mask'].to(device, torch.float32)
+        nodes = data['one_hot'].to(device, torch.float32)
+        #charges = data['charges'].to(device, dtype).squeeze(2)
+        #nodes = prop_utils.preprocess_input(one_hot, charges, args.charge_power, charge_scale, device)
+
+        #nodes = nodes.view(batch_size * n_nodes, -1)
+        # nodes = torch.cat([one_hot, charges], dim=1)
+        #edges = prop_utils.get_adj_matrix(n_nodes, batch_size, device)
+        #label = data[property].to(device, torch.float32)
+        """
+        batch_size, n_nodes, _ = data['positions'].size()
+        node_mask_unflattened = data['atom_mask'].to(device, torch.float32)
+        node_types_unflattened = data['one_hot'].to(device, torch.float32)
+        positions_unflattened = data['positions'].to(device, torch.float32)
+
+
+        # FP stuff
+        fp_bits, fp_1024 = compute_fingerprint_bits(data['positions'], data['charges'], data['num_atoms'])
+        fp_1024 = torch.stack(fp_1024)
+        fp_1024 = fp_1024.to(device, dtype=torch.float32)
+        fp_1024 = fp_1024.unsqueeze(1).repeat(1, dataset_info["max_n_nodes"], 1)
+        
+
+        molecule_stable = 0
+        nr_stable_bonds = 0
+        n_atoms = 0
+        for index in range(0, batch_size):
+            num_atoms = int(node_mask_unflattened[index].sum().item())
+            atom_type = node_types_unflattened[index][:num_atoms].cpu().detach().numpy()
+            atom_type = atom_type.argmax(axis=1)
+            x_squeeze = positions_unflattened[index][:num_atoms].squeeze(0).cpu().detach().numpy()
+            validity_results = check_stability(x_squeeze, atom_type, loader.dataset_info)
+            molecule_stable += int(validity_results[0])
+            nr_stable_bonds += int(validity_results[1])
+            n_atoms += int(validity_results[2])
+
+        # print("Molecule stable")
+        mol_stability = molecule_stable / batch_size
+        atm_stability = nr_stable_bonds / n_atoms
+        # print(f"Molecular stability: {mol_stability}")
+        # print(f"Atom stability: {atm_stability}")
+
+        wandb.log({'Molecular stability': mol_stability}, commit=True)
+        mol_stability_arr.append(mol_stability)
+        wandb.log({'Atom stability': atm_stability}, commit=True)
+        atm_stability_arr.append(atm_stability)
+
+        nodesxsample = data['num_atoms']
+        batch_size = len(nodesxsample)
+        one_hot, charges, x, node_mask = sample(args, device, model, dataset_info, prop_dist=None,
+                                                nodesxsample=nodesxsample, context=fp_1024, use_fp=True)
+        charges = h_to_charges_qm9(one_hot.cpu().detach())
+        tani_sim = tanimoto(compute_fingerprint_bits(data['positions'], data['charges2'])[0], #data['num_atoms'] 
+                                compute_fingerprint_bits(x.cpu().detach(), charges)[0])
+        print(f"Tanimoto similarity: {tani_sim}")
+        tanimoto_sims.append(tani_sim)
+    
+        prefix = ""
+        if partition != 'train':
+            prefix = ">> %s \t" % partition
+
+        if i % log_interval == 0:
+            print(prefix + "Epoch %d \t Iteration %d \t loss %.4f \t mae %.4f \t mol stab %.4f \t atm stab %.4f" % (epoch, i, sum(res['loss_arr'][-10:])/len(res['loss_arr'][-10:]),tani_sim, mol_stability, atm_stability))
+        if debug_break:
+            break
+    
+    if use_wandb:
+       mol_stability_avg = sum(mol_stability_arr) / len(mol_stability_arr)
+       atm_stability_avg = sum(atm_stability_arr) / len(atm_stability_arr)
+
+       average_similarity = tanimoto_sims / len(tanimoto_sims)
+
+       mae_avg = res['loss'] / res['counter']
+       print(f"Molecular stability avg: {mol_stability_avg}")
+       print(f"Atom stability avg: {atm_stability_avg}")
+       wandb.log({'Average MAE': mae_avg}, commit=True)
+       wandb.log({"Average Molecular Stability": mol_stability_avg}, commit=True)
+       wandb.log({"Average Atom Stability": atm_stability_avg}, commit=True)
+       wandb.log({"Average Atom Stability": atm_stability_avg}, commit=True)
+       wandb.log({"Average Tanimoto Similarity": average_similarity}, commit=True)
+       paired = (mol_stability_avg, mae_avg)
+       wandb.log({"Pareto": paired}, commit=True)
+
+       if not os.path.exists(f'experiments/pareto/{property}_target.csv'):
+           df = pd.DataFrame(columns=['guidance_weight', 'mol_stability', 'mae'])
+           df.to_csv(f'experiments/pareto/{property}_target.csv', index=False)
+
+       df = pd.read_csv(f'experiments/pareto/{property}_target.csv')
+       df.loc[len(df.index)] = [loader.args_gen.guidance_weight, mol_stability_avg, mae_avg]
+       df.to_csv(f'experiments/pareto/{property}.csv', index=False)
+    
+    return res['loss'] / res['counter']
+
 def main_quantitative(args):
     # Get classifier
     #if args.task == "numnodes":
     #    class_dir = args.classifiers_path[:-6] + "numnodes_%s" % args.property
     #else:
-    class_dir = args.classifiers_path
-    classifier = get_classifier(class_dir).to(args.device)
+    #class_dir = args.classifiers_path
+    #classifier = get_classifier(class_dir).to(args.device)
 
     # Get generator and dataloader used to train the generator and evalute the classifier
     args_gen = get_args_gen(args.generators_path)
@@ -141,26 +244,27 @@ def main_quantitative(args):
         args_gen.aggregation_method = 'sum'
 
     dataloaders = get_dataloader(args_gen)
-    property_norms = compute_mean_mad(dataloaders, args_gen.conditioning, args_gen.dataset)
+    #property_norms = compute_mean_mad(dataloaders, args_gen.conditioning, args_gen.dataset)
     if args.override_guidance:
         args_gen.guidance_weight = args.override_guidance
 
-    model, nodes_dist, prop_dist, _ = get_generator(args.generators_path, dataloaders,
-                                                    args.device, args_gen, property_norms)
+    model, nodes_dist, prop_dist, dataset_info = get_generator(args.generators_path, dataloaders,
+                                                    args.device, args_gen, property_norms=None, ckpt=args.ckpt)
 
     # Create a dataloader with the generator
-    mean, mad = property_norms[args.property]['mean'], property_norms[args.property]['mad']
+    #mean, mad = property_norms[args.property]['mean'], property_norms[args.property]['mad']
 
+    property = "fp"
     if args.task == 'edm':
         diffusion_dataloader = DiffusionDataloader(args_gen, model, nodes_dist, prop_dist,
                                                    args.device, batch_size=args.batch_size, iterations=args.iterations)
         print("EDM: We evaluate the classifier on our generated samples")
-        loss = test(classifier, 0, diffusion_dataloader, mean, mad, args.property, args.device, 1, args.debug_break, 
+        loss = test(model, 0, diffusion_dataloader, dataset_info, args.device, property, 1, args.debug_break, 
                     args.use_wandb, args.exp_name, args.use_multiprop)
         print("Loss classifier on Generated samples: %.4f" % loss)
     elif args.task == 'qm9_second_half':
         print("qm9_second_half: We evaluate the classifier on QM9")
-        loss = test(classifier, 0, dataloaders['train'], mean, mad, args.property, args.device, args.log_interval,
+        loss = test(model, 0, dataloaders['train'], dataset_info, args.device, property, args.device, args.log_interval,
                     args.debug_break, args.use_wandb, args.exp_name, args.use_multiprop)
         print("Loss classifier on qm9_second_half: %.4f" % loss)
     elif args.task == 'naive':
@@ -168,15 +272,9 @@ def main_quantitative(args):
         length = dataloaders['train'].dataset.data[args.property].size(0)
         idxs = torch.randperm(length)
         dataloaders['train'].dataset.data[args.property] = dataloaders['train'].dataset.data[args.property][idxs]
-        loss = test(classifier, 0, dataloaders['train'], mean, mad, args.property, args.device, args.log_interval,
+        loss = test(model, 0, dataloaders['train'], dataset_info, args.device, property, args.log_interval,
                     args.debug_break, args.use_wandb, args.exp_name, args.use_multiprop)
         print("Loss classifier on naive: %.4f" % loss)
-    #elif args.task == 'numnodes':
-    #    print("Numnodes: We evaluate the numnodes classifier on EDM samples")
-    #    diffusion_dataloader = DiffusionDataloader(args_gen, model, nodes_dist, prop_dist, device,
-    #                                               batch_size=args.batch_size, iterations=args.iterations)
-    #    loss = test(classifier, 0, diffusion_dataloader, mean, mad, args.property, args.device, 1, args.debug_break)
-    #    print("Loss numnodes classifier on EDM generated samples: %.4f" % loss)
 
 
 def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, epoch=0, id_from=0):
@@ -209,6 +307,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_name', type=str, default='eval_conditional_fp')
     parser.add_argument('--generators_path', type=str, default='outputs/exp_cond_fp_pretrained')
+    # Evals of fingerprints
     #parser.add_argument('--property', type=str, default='alpha',
     #                    help="'alpha', 'homo', 'lumo', 'gap', 'mu', 'Cv'")
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -228,6 +327,7 @@ if __name__ == "__main__":
     parser.add_argument('--override_guidance', type=float, help='Whether or not to override the guidance weight parameter')
     parser.add_argument('--use_wandb', action='store_true', help='Enable wandb logging of classifier')
     parser.add_argument('--use_multiprop', action='store_true', help="Classifier is being run on a multiproperty conditional model")
+    parser.add_argument('--ckpt', type=int, default=None, help='Checkpoint number to load')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()

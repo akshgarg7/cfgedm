@@ -99,6 +99,7 @@ parser.add_argument('--test_epochs', type=int, default=10)
 parser.add_argument('--data_augmentation', type=eval, default=False, help='use attention in the EGNN')
 parser.add_argument("--conditioning", nargs='+', default=[],
                     help='arguments : homo | lumo | alpha | gap | mu | Cv | fingerprint' )
+
 parser.add_argument("--fp_conditioning", type=bool, default=True, help = "condition on fingerprint")
 parser.add_argument('--resume', type=str, default=None,
                     help='')
@@ -211,11 +212,15 @@ print('Conditioning on fingerprints')
 context_dummy = prepare_fp_context(data_dummy)
 context_node_nf = context_dummy.size(2)
 property_norms=None
-args.context_node_nf = context_node_nf
+if args.fp_conditioning:
+    # FP hidden dim size
+    args.context_node_nf = 192
+else:
+    args.context_node_nf = context_node_nf
 
 
 # Create EGNN flow
-model, nodes_dist, prop_dist = get_model(args, device, dataset_info, dataloaders['train'], use_fp=args.fp_conditioning)
+model, nodes_dist, prop_dist = get_model(args, device, dataset_info, dataloaders['train'])
 if prop_dist is not None:
     prop_dist.set_normalizer(property_norms)
 model = model.to(device)
@@ -282,13 +287,14 @@ def main():
                     prop_dist.set_normalizer(property_norms)
                 analyze_and_save(args=args, epoch=epoch, model_sample=model_ema, nodes_dist=nodes_dist,
                                  dataset_info=dataset_info, device=device,
-                                 prop_dist=prop_dist, n_samples=args.n_stability_samples)
+                                 prop_dist=prop_dist, n_samples=args.n_stability_samples, use_fp=args.fp_conditioning)
+                
             nll_val = test(args=args, loader=dataloaders['valid'], epoch=epoch, eval_model=model_ema_dp,
                            partition='Val', device=device, dtype=dtype, nodes_dist=nodes_dist,
-                           property_norms=property_norms)
+                           property_norms=property_norms, use_fp=args.fp_conditioning)
             nll_test = test(args=args, loader=dataloaders['test'], epoch=epoch, eval_model=model_ema_dp,
                             partition='Test', device=device, dtype=dtype,
-                            nodes_dist=nodes_dist, property_norms=property_norms)
+                            nodes_dist=nodes_dist, property_norms=property_norms, use_fp=args.fp_conditioning)
 
             if nll_val < best_nll_val:
                 best_nll_val = nll_val

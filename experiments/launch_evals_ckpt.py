@@ -58,13 +58,13 @@ def create_job_file(property, input_file, output_file, epoch, guidance=0.25):
     # os.remove(f'experiments/temp_job_{property}.sh')
 
 # properties = ['mu', 'homo', 'lumo', 'gap', 'Cv']
-properties = ['Cv']
+properties = ['Cv', 'gap']
 # epochs = [13, 15, 17, 20, 21, 26]
 # epochs = epochs[::-1]
 # epochs = [x * 100 for x in epochs]
 
-# guidance_weights = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3.0]
-guidance_weights = [0.5, 1, 1.5, 2, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+guidance_weights = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3.0]
+#guidance_weights = [0.5, 1, 1.5, 2, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
 # guidance_weights = [5.5, 6, 6.5, 7, 7.5]
 # guidance_weights = [x-0.25 for x in guidance_weights] + guidance_weights
 
