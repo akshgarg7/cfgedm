@@ -13,7 +13,9 @@ def get_model(args, device, dataset_info, dataloader_train):
     nodes_dist = DistributionNodes(histogram)
 
     prop_dist = None
-    if len(args.conditioning) > 0:
+    if args.fp_conditioning:
+        print("Working with fingerprinting, so not initializing a distribution property data loader.")
+    elif len(args.conditioning) > 0:
         prop_dist = DistributionProperty(dataloader_train, args.conditioning)
 
     if args.condition_time:

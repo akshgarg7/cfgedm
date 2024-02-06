@@ -2,6 +2,8 @@ import numpy as np
 import getpass
 import os
 import torch
+from ase.data import atomic_masses
+
 
 # Folders
 def create_folders(args):

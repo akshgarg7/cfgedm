@@ -120,6 +120,7 @@ parser.add_argument('--normalization_factor', type=float, default=1,
                     help="Normalize the sum aggregation of EGNN")
 parser.add_argument('--aggregation_method', type=str, default='sum',
                     help='"sum" or "mean"')
+parser.add_argument('--fp_conditioning', action='store_true', default=False, help='Whether to train the fingerprint model.')
 args = parser.parse_args()
 
 dataset_info = get_dataset_info(args.dataset, args.remove_h)
@@ -197,8 +198,10 @@ dataloaders, charge_scale = dataset.retrieve_dataloaders(args)
 
 data_dummy = next(iter(dataloaders['train']))
 
-
-if len(args.conditioning) > 0:
+if args.fp_conditioning:
+    context_node_nf = 1024
+    property_norms = None
+elif len(args.conditioning) > 0:
     print(f'Conditioning on {args.conditioning}')
     property_norms = compute_mean_mad(dataloaders, args.conditioning, args.dataset)
     context_dummy = prepare_context(args.conditioning, data_dummy, property_norms)
@@ -266,7 +269,7 @@ def main():
         train_epoch(args=args, loader=dataloaders['train'], epoch=epoch, model=model, model_dp=model_dp,
                     model_ema=model_ema, ema=ema, device=device, dtype=dtype, property_norms=property_norms,
                     nodes_dist=nodes_dist, dataset_info=dataset_info,
-                    gradnorm_queue=gradnorm_queue, optim=optim, prop_dist=prop_dist)
+                    gradnorm_queue=gradnorm_queue, optim=optim, prop_dist=prop_dist, use_fp=args.fp_conditioning)
         print(f"Epoch took {time.time() - start_epoch:.1f} seconds.")
 
         if epoch % args.test_epochs == 0:

@@ -10,10 +10,13 @@ import qm9.utils as qm9utils
 from qm9 import losses
 import time
 import torch
+from fp_utils import compute_fingerprint
+
+
 
 
 def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dtype, property_norms, optim,
-                nodes_dist, gradnorm_queue, dataset_info, prop_dist):
+                nodes_dist, gradnorm_queue, dataset_info, prop_dist, use_fp=False):
     model_dp.train()
     model.train()
     nll_epoch = []
@@ -24,6 +27,10 @@ def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dt
         edge_mask = data['edge_mask'].to(device, dtype)
         one_hot = data['one_hot'].to(device, dtype)
         charges = (data['charges'] if args.include_charges else torch.zeros(0)).to(device, dtype)
+        
+        # charges = torch.zeros(0).to(device, dtype)
+        # if args.force_charge_use:
+        #     charges = data['charges'].to(device, dtype)
 
         x = remove_mean_with_mask(x, node_mask)
 
@@ -41,7 +48,12 @@ def train_epoch(args, loader, epoch, model, model_dp, model_ema, ema, device, dt
 
         h = {'categorical': one_hot, 'integer': charges}
 
-        if len(args.conditioning) > 0:
+        if use_fp:
+            _, fingerprint_1024 = compute_fingerprint(data['positions'], data['charges'], data['num_atoms'])
+            label = torch.stack(fingerprint_1024)
+            context = label.to(device, dtype)
+            context = context.unsqueeze(1).repeat(1, x.size(1), 1)
+        elif len(args.conditioning) > 0:
             context = qm9utils.prepare_context(args.conditioning, data, property_norms).to(device, dtype)
             assert_correctly_masked(context, node_mask)
         else:
