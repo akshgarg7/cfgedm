@@ -109,7 +109,7 @@ def sample_chain(args, device, flow, n_tries, dataset_info, prop_dist=None):
 
 def sample(args, device, generative_model, dataset_info,
            prop_dist=None, nodesxsample=torch.tensor([10]), context=None,
-           fix_noise=False):
+           fix_noise=False, seed=None):
     max_n_nodes = dataset_info['max_n_nodes']  # this is the maximum node_size in QM9
 
     assert int(torch.max(nodesxsample)) <= max_n_nodes
@@ -135,9 +135,8 @@ def sample(args, device, generative_model, dataset_info,
         context = context.unsqueeze(1).repeat(1, max_n_nodes, 1).to(device) * node_mask
     else:
         context = None
-
     if args.probabilistic_model == 'diffusion':
-        x, h = generative_model.sample(batch_size, max_n_nodes, node_mask, edge_mask, context, fix_noise=fix_noise)
+        x, h = generative_model.sample(batch_size, max_n_nodes, node_mask, edge_mask, context, fix_noise=fix_noise, seed=seed)
 
         assert_correctly_masked(x, node_mask)
         assert_mean_zero_with_mask(x, node_mask)
@@ -155,7 +154,8 @@ def sample(args, device, generative_model, dataset_info,
     return one_hot, charges, x, node_mask
 
 
-def sample_sweep_conditional(args, device, generative_model, dataset_info, prop_dist, n_nodes=19, n_frames=100):
+def sample_sweep_conditional(args, device, generative_model, dataset_info, prop_dist, n_nodes=19, n_frames=100, seed=None):
+    # n_frames = 10
     nodesxsample = torch.tensor([n_nodes] * n_frames)
 
     context = []
@@ -165,8 +165,16 @@ def sample_sweep_conditional(args, device, generative_model, dataset_info, prop_
         min_val = (min_val - mean) / (mad)
         max_val = (max_val - mean) / (mad)
         context_row = torch.tensor(np.linspace(min_val, max_val, n_frames)).unsqueeze(1)
+        print(np.linspace(min_val, max_val, n_frames))
         context.append(context_row)
     context = torch.cat(context, dim=1).float().to(device)
+    one_hot, charges, x, node_mask = sample(args, device, generative_model, dataset_info, prop_dist, nodesxsample=nodesxsample, context=context, fix_noise=True, seed=seed)
+    return one_hot, charges, x, node_mask
 
-    one_hot, charges, x, node_mask = sample(args, device, generative_model, dataset_info, prop_dist, nodesxsample=nodesxsample, context=context, fix_noise=True)
+def sample_sweep_guidance(args, device, generative_model, dataset_info, prop_dist, context, n_nodes=19, n_frames=1, seed=None):
+    nodesxsample = torch.tensor([n_nodes] * n_frames)
+    # TODO: Verify guidance
+    
+
+    one_hot, charges, x, node_mask = sample(args, device, generative_model, dataset_info, prop_dist, nodesxsample=nodesxsample, context=context, fix_noise=True, seed=seed)
     return one_hot, charges, x, node_mask

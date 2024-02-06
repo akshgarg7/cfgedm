@@ -33,3 +33,5 @@ geom_drugs.sh
 job_drafts/
 pretrained/
 logs/
+job_drafts_double/
+job_drafts_qual/

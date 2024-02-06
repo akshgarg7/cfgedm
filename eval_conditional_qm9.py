@@ -1,3 +1,4 @@
+import os 
 import argparse
 from os.path import join
 import torch
@@ -9,9 +10,13 @@ from qm9.utils import compute_mean_mad
 from qm9.sampling import sample
 from qm9.property_prediction.main_qm9_prop import test
 from qm9.property_prediction import main_qm9_prop
-from qm9.sampling import sample_chain, sample, sample_sweep_conditional
+from qm9.sampling import sample_chain, sample, sample_sweep_conditional, sample_sweep_guidance
 import qm9.visualizer as vis
-
+from qm9.property_prediction import prop_utils
+import csv
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 def get_classifier(dir_path='', device='cpu'):
     with open(join(dir_path, 'args.pickle'), 'rb') as f:
@@ -103,11 +108,17 @@ class DiffusionDataloader:
 
         # Instead of just applying the transform to the first property, we apply it to all properties
         # prop_key = self.prop_dist.properties[0]
-        for i in range(len(self.prop_dist.properties)):
-            key = self.prop_dist.properties[i]
-            context[:, i] = context[:, i] * self.prop_dist.normalizer[key]['mad'] + self.prop_dist.normalizer[key]['mean']
+        if len(self.prop_dist.properties) > 1:
+            for i in range(len(self.prop_dist.properties)):
+                key = self.prop_dist.properties[i]
+                context[:, i] = context[:, i] * self.prop_dist.normalizer[key]['mad'] + self.prop_dist.normalizer[key]['mean']
             # context_unorm[key] = context_i
-
+        else:
+            prop_key = self.prop_dist.properties[0]
+            if self.unkown_labels:
+                context[:] = self.prop_dist.normalizer[prop_key]['mean']
+            else:
+                context = context * self.prop_dist.normalizer[prop_key]['mad'] + self.prop_dist.normalizer[prop_key]['mean']
         # for prop in self.prop_dist.properties:
         #     if self.unkown_labels:
         #         context[:] = self.prop_dist.normalizer[prop]['mean']
@@ -146,6 +157,7 @@ def main_quantitative(args):
 
     # Get generator and dataloader used to train the generator and evalute the classifier
     args_gen = get_args_gen(args.generators_path)
+    args_gen.fp_conditioning = False
 
     # Careful with this -->
     if not hasattr(args_gen, 'diffusion_noise_precision'):
@@ -196,8 +208,310 @@ def main_quantitative(args):
     #    print("Loss numnodes classifier on EDM generated samples: %.4f" % loss)
 
 
-def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, epoch=0, id_from=0):
-    one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist)
+def high_level_overview_old(exp_name, context, predicted_prop):
+        # write a function that logs gen_properties to a csv file in the folder "outputs/%s/analysis/guidance/"
+        base_folder = f"outputs/analysis/{exp_name}/guidance/run/"
+        os.makedirs(base_folder, exist_ok=True)
+        csv_file_path = os.path.join(base_folder, "gen_properties.csv")
+        
+        context_numpy = context.cpu().numpy()
+        context = context_numpy[0]
+        predicted_prop = predicted_prop.cpu().detach().numpy()
+        gen_properties = {
+            'True': context,
+            'Predicted': predicted_prop,
+        }
+
+        file_exists = os.path.isfile(csv_file_path)
+
+        # Open the CSV file for appending
+        with open(csv_file_path, mode='a', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=gen_properties.keys())
+            
+            # Write the header only if the file is new
+            if not file_exists:
+                writer.writeheader()
+            
+            # Write the gen_properties data
+            writer.writerow(gen_properties)
+
+def micro_writes_old(exp_name, context, predicted_prop, run_id, ws):
+    base_folder = f"outputs/analysis/{exp_name}/guidance/run{run_id}/"
+    os.makedirs(base_folder, exist_ok=True)
+    csv_file_path = os.path.join(base_folder, "gen_properties.csv")
+
+    context_numpy = context.cpu().numpy()
+    true_value = context_numpy[0][0]
+    predicted_prop = predicted_prop.cpu().detach().numpy()
+
+    # Ensure 'True' values array matches the length of 'Predicted' values
+    true_values = np.full_like(predicted_prop, true_value)
+
+    gen_properties = {
+        'True': true_values,
+        'Predicted': predicted_prop,
+        'w': ws,
+    }
+
+    # Check if the CSV file exists to decide on writing headers
+    file_exists = os.path.isfile(csv_file_path)
+
+    # Open the CSV file for appending
+    with open(csv_file_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        
+        # Write the header only if the file is new
+        if not file_exists:
+            writer.writerow(['True', 'Predicted', 'w'])
+        
+        # Write the 'True' and 'Predicted' values
+        for i, (true_val, pred_val) in enumerate(zip(true_values, predicted_prop)):
+            writer.writerow([true_val, pred_val, ws[i]])
+
+def high_level_overview(exp_name, context, predicted_prop, run_id, ws):
+    base_folder = f"outputs/analysis/{exp_name}/guidance/run/"
+    os.makedirs(base_folder, exist_ok=True)
+    csv_file_path = os.path.join(base_folder, "gen_properties.csv")
+    
+    context_numpy = context.cpu().numpy()
+    true_value = context_numpy[0][0]
+    predicted_prop = predicted_prop.cpu().detach().numpy()
+
+    
+    # Create a DataFrame
+    df = pd.DataFrame({
+        'ws': ws,
+        'Run Id': [run_id] * len(predicted_prop),
+        'True': [true_value] * len(predicted_prop),
+        'Predicted': predicted_prop
+    })
+
+    df['mae'] = df.apply(lambda row: abs(row['True'] - row['Predicted']), axis=1)
+    
+    # Write to CSV, append if it exists
+    df.to_csv(csv_file_path, mode='a', header=not os.path.exists(csv_file_path), index=False)
+
+def micro_writes(exp_name, context, predicted_prop, run_id, ws):
+    base_folder = f"outputs/analysis/{exp_name}/guidance/run{run_id}/"
+    os.makedirs(base_folder, exist_ok=True)
+    csv_file_path = os.path.join(base_folder, "gen_properties.csv")
+    
+    context_numpy = context.cpu().numpy()
+    true_value = context_numpy[0][0]
+    predicted_prop = predicted_prop.cpu().detach().numpy()
+    
+    # Ensure 'True' values array matches the length of 'Predicted' values
+    true_values = [true_value] * len(predicted_prop)
+    
+    # Create a DataFrame
+    df = pd.DataFrame({
+        'True': true_values,
+        'Predicted': predicted_prop,
+        'w': ws
+    })
+
+    df['mae'] = df.apply(lambda row: abs(row['True'] - row['Predicted']), axis=1)
+    
+    # Write to CSV, append if it exists
+    df.to_csv(csv_file_path, mode='a', header=not os.path.exists(csv_file_path), index=False)
+
+def longest_decreasing_subsequence_ids(maes):
+    n = len(maes)
+    # Initialize the LDS array and the predecessor array
+    lds = [1] * n
+    prev = [-1] * n
+
+    # Compute the LDS values and track predecessors
+    for i in range(1, n):
+        for j in range(i):
+            if maes[i] < maes[j] and lds[i] < lds[j] + 1:
+                lds[i] = lds[j] + 1
+                prev[i] = j
+
+    # Find the index of the maximum value in LDS
+    max_length = max(lds)
+    max_index = lds.index(max_length)
+
+    # Reconstruct the LDS by backtracking through the prev array
+    lds_ids = []
+    current_index = max_index
+    while current_index != -1:
+        lds_ids.append(current_index)
+        current_index = prev[current_index]
+
+    lds_ids.reverse()  # Reverse to get the correct order
+    lds_seq = [maes[id] for id in lds_ids]  # Get the MAE values for the LDS IDs
+
+    return lds_seq, lds_ids, max_length
+
+def generate_figs(exp_name, epoch):
+    base_folder = f"outputs/analysis/{exp_name}/guidance/run{epoch}"
+    csv_path = f"{base_folder}/gen_properties.csv"
+    df = pd.read_csv(csv_path)
+
+    maes = df['mae'].to_list()
+    _, ids_with_decreasing_mae, _ = longest_decreasing_subsequence_ids(maes)
+    ws = df['w'].to_list()
+
+    # Iterate through MAEs to find where a decrease occurs
+    # ids_with_decreasing_mae = [0]
+    # for i in range(1, len(maes)):
+    #     if maes[i] < maes[i - 1]:  # Check if current MAE is less than the previous MAE
+    #         ids_with_decreasing_mae.append(i) 
+
+    pngs = [file for file in os.listdir(base_folder) if '.png' in file]
+    png_idx = [int(file[-7:-4]) for file in pngs]
+    pngs_sorted_by_indx = [x[1] for x in sorted(zip(png_idx, pngs))]
+
+    filtered_pngs = [png for i, png in enumerate(pngs_sorted_by_indx) if i in ids_with_decreasing_mae]
+    ws = [ws[i] for i in range(len(ws)) if i in ids_with_decreasing_mae]
+    maes = [maes[i] for i in range(len(maes)) if i in ids_with_decreasing_mae]
+
+    # Plot the filtered PNG files
+    ncols = 5  # Adjust based on how many images per row you want
+    nrows = (len(filtered_pngs) + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(25, nrows * (5+3)))
+    axes = axes.flatten()
+
+    for idx, png in enumerate(filtered_pngs):
+        img_path = os.path.join(base_folder, png)
+        img = plt.imread(img_path)
+        axes[idx].imshow(img)
+        axes[idx].axis('off')  # Hide axes
+        title = f'$w$={ws[idx]}, MAE={maes[idx]:.2f}'
+        axes[idx].set_title(title, fontsize=20) 
+
+    # Hide unused subplots if any
+    for ax in axes[len(filtered_pngs):]:
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+    save_path = os.path.join(base_folder, 'final/combined_images.png')
+    os.makedirs(os.path.join(base_folder, 'final'), exist_ok=True)
+    plt.savefig(save_path)
+
+    plt.show()  # Display the plot after saving
+    print(f"Figure saved to {save_path}")
+
+def save_and_sample_guidance(classifier, args, device, model, prop_dist, dataset_info, epoch=0, id_from=0, seed=None):
+
+    # breakpoint()
+    # ws = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5]
+    ws = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5]
+    # ws = [0.5]
+    one_hot_arr = []
+    chargse_arr = []
+    x_arr = []
+    node_mask_arr = []
+    context = []
+
+    n_nodes = 19
+    prop = args.conditioning[0]
+    min_val, max_val = prop_dist.distributions[prop][n_nodes]['params']
+    mean, mad = prop_dist.normalizer[prop]['mean'], prop_dist.normalizer[prop]['mad']
+    min_val = (min_val - mean) / (mad)
+    max_val = (max_val - mean) / (mad)
+    context = torch.tensor((min_val+max_val)/2).float().to(device).repeat(1).unsqueeze(1)
+
+    generate_figs(args.exp_name, epoch)
+    raise("Stop here")
+
+    print(seed)
+    for w in ws:
+        model.w = w
+        one_hot, charges, x, node_mask = sample_sweep_guidance(args, device, model, dataset_info, prop_dist, context, seed=seed)
+        one_hot_arr.append(one_hot)
+        chargse_arr.append(charges)
+        x_arr.append(x)
+        node_mask_arr.append(node_mask)
+
+    node_mask = torch.cat(node_mask_arr, dim=0)
+    node_mask = node_mask.squeeze(-1)
+    node_mask_unsqueezed = node_mask
+    bs, n_nodes = node_mask.size()
+
+    one_hot = torch.cat(one_hot_arr, dim=0)
+    charges = torch.cat(chargse_arr, dim=0)
+    x = torch.cat(x_arr, dim=0)
+    x_orig = x
+    x = x.view(bs * n_nodes, -1).to(device, torch.float32)
+    edge_mask = node_mask.unsqueeze(1) * node_mask.unsqueeze(2)
+    node_mask = node_mask.view(bs * n_nodes, -1).to(device, torch.float32)
+    edges = prop_utils.get_adj_matrix(n_nodes, bs, device)
+    nodes = one_hot.to(device, torch.float32)
+    nodes = nodes.view(bs * n_nodes, -1).to(device, torch.float32)
+    edge_mask = edge_mask.view(bs * n_nodes * n_nodes, 1).to(device, torch.float32)
+    predicted_prop = classifier(h0=nodes, x=x, edges=edges, edge_attr=None, node_mask=node_mask, edge_mask=edge_mask,
+                     n_nodes=n_nodes)
+    
+    
+    vis.save_xyz_file(
+        'outputs/analysis/%s/guidance/run%s/' % (args.exp_name, epoch), one_hot, charges, x_orig, dataset_info,
+        id_from, name='conditional', node_mask=node_mask_unsqueezed)
+
+    vis.visualize_chain("outputs/analysis/%s/guidance/run%s/" % (args.exp_name, epoch), dataset_info,
+                        wandb=None, mode='conditional', spheres_3d=True)
+    
+
+    high_level_overview(args.exp_name, context, predicted_prop, epoch, ws)
+    # breakpoint()
+
+    micro_writes(args.exp_name, context,predicted_prop, epoch, ws)
+
+
+    # base_folder = f"outputs/analysis/{args.exp_name}/guidance/run{epoch}"
+    # csv_path = f"{base_folder}/gen_properties.csv"
+    # df = pd.read_csv(csv_path)
+
+    # # going down the df, curate all ids for which the MAE decreases relative to the last value
+    # ids_with_decreasing_mae = []
+    # maes = df['mae'].to_list()
+
+    # # Iterate through MAEs to find where a decrease occurs
+    # for i in range(1, len(maes)):
+    #     if maes[i] < maes[i - 1]:  # Check if current MAE is less than the previous MAE
+    #         ids_with_decreasing_mae.append(i) 
+
+    # pngs = [file for file in os.listdir(base_folder) if '.png' in file]
+    # png_idx = [int(file[-7:-4]) for file in pngs]
+    # pngs_sorted_by_indx = [x[1] for x in sorted(zip(png_idx, pngs))]
+
+    # filtered_pngs = [png for i, png in enumerate(pngs_sorted_by_indx) if i in ids_with_decreasing_mae]
+
+    # # Plot the filtered PNG files
+    # ncols = 3  # Adjust based on how many images per row you want
+    # nrows = (len(filtered_pngs) + ncols - 1) // ncols
+    # fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(15, nrows * 5))
+    # axes = axes.flatten()
+
+    # for idx, png in enumerate(filtered_pngs):
+    #     img_path = os.path.join(base_folder, png)
+    #     img = plt.imread(img_path)
+    #     axes[idx].imshow(img)
+    #     axes[idx].axis('off')  # Hide axes
+    #     axes[idx].set_title(f'ID {ids_with_decreasing_mae[idx]}')  # Set title with ID
+
+    # # Hide unused subplots if any
+    # for ax in axes[len(filtered_pngs):]:
+    #     ax.axis('off')
+
+    # plt.tight_layout()
+    # plt.show()
+
+    # save_path = os.path.join(base_folder, 'combined_images.png')
+    # plt.savefig(save_path)
+
+    # plt.show()  # Display the plot after saving
+    # print(f"Figure saved to {save_path}")
+
+
+
+    return one_hot, charges, x_orig
+
+def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, epoch=0, id_from=0, seed=None):
+    one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist, seed=seed)
 
     vis.save_xyz_file(
         'outputs/%s/analysis/run%s/' % (args.exp_name, epoch), one_hot, charges, x, dataset_info,
@@ -210,16 +524,31 @@ def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, ep
 
 
 def main_qualitative(args):
+    
+    class_dir = args.classifiers_path
+    classifier = get_classifier(class_dir).to(args.device)
+
     args_gen = get_args_gen(args.generators_path)
+    if args.override_guidance:
+        args_gen.guidance_weight = args.override_guidance
+    args_gen.ckpt = args.ckpt
+    args_gen.fp_conditioning = False
     dataloaders = get_dataloader(args_gen)
     property_norms = compute_mean_mad(dataloaders, args_gen.conditioning, args_gen.dataset)
     model, nodes_dist, prop_dist, dataset_info = get_generator(args.generators_path,
                                                                dataloaders, args.device, args_gen,
                                                                property_norms, ckpt=args_gen.ckpt)
 
-    for i in range(args.n_sweeps):
-        print("Sampling sweep %d/%d" % (i+1, args.n_sweeps))
-        save_and_sample_conditional(args_gen, device, model, prop_dist, dataset_info, epoch=i, id_from=0)
+    
+    if args.mode == 'guidance':
+        for i in range(args.n_sweeps):
+            print("Sampling sweep for %d/%d" % (i+1, args.n_sweeps))
+            save_and_sample_guidance(classifier, args_gen, device, model, prop_dist, dataset_info, epoch=i, id_from=0, seed=i)
+
+    else:
+        for i in range(args.n_sweeps):
+            print("Sampling sweep %d/%d" % (i+1, args.n_sweeps))
+            save_and_sample_conditional(args_gen, device, model, prop_dist, dataset_info, epoch=i, id_from=0, seed=i)
 
 
 if __name__ == "__main__":
@@ -247,6 +576,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_wandb', action='store_true', help='Enable wandb logging of classifier')
     parser.add_argument('--use_multiprop', action='store_true', help="Classifier is being run on a multiproperty conditional model")
     parser.add_argument('--ckpt', type=int, default=None, help='Checkpoint number to load')
+    parser.add_argument('--mode', type=str, default='property')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()

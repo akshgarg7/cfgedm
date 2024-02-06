@@ -15,7 +15,6 @@ def gen_file(property1, property2=None):
 
     # Run the ls command and capture the output
     result = subprocess.run(['ls', path], capture_output=True, text=True)
-
     # Check if the command was successful
     if result.returncode == 0:
         # Split the output into lines

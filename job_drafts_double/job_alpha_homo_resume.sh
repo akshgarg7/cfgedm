@@ -32,7 +32,7 @@ python main_qm9.py --exp_name single_cfg_alpha_homo \
                    --dequantization deterministic \
                    --include_charges False \
                    --diffusion_loss_type l2 \
-                   --batch_size 192 \
+                   --batch_size 160 \
                    --conditioning alpha homo \
                    --dataset qm9_second_half \
                    --classifier_free_guidance \

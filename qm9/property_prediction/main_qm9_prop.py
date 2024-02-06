@@ -49,8 +49,7 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
 
         atom_positions = data['positions'].view(batch_size * n_nodes, -1).to(device, torch.float32)
         atom_mask = data['atom_mask'].view(batch_size * n_nodes, -1).to(device, torch.float32)
-        edge_mask = data['edge_mask'].to(device, t
-                                         orch.float32)
+        edge_mask = data['edge_mask'].to(device, torch.float32)
         nodes = data['one_hot'].to(device, torch.float32)
         #charges = data['charges'].to(device, dtype).squeeze(2)
         #nodes = prop_utils.preprocess_input(one_hot, charges, args.charge_power, charge_scale, device)

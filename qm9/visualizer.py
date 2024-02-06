@@ -56,6 +56,7 @@ def load_molecule_xyz(file, dataset_info):
 
 
 def load_xyz_files(path, shuffle=True):
+    # breakpoint()
     files = glob.glob(path + "/*.txt")
     if shuffle:
         random.shuffle(files)
