@@ -17,6 +17,7 @@ cd /atlas/u/akshgarg/cfgedm/
 conda activate torch3.7
 
 python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY_resume \
+                               --classifiers_path pretrained/evaluate_PROPERTY \
                                --property PROPERTY  \
                                --batch_size BATCH_SIZE \
                                --task qualitative \

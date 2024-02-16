@@ -69,7 +69,7 @@ properties = [('alpha', 'mu')] # , ('alpha', 'homo'), ('homo', 'lumo')]
 guidance_weights = [0.5, 1, 1.5, 2, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
 # guidance_weights = [0.5]
 # guidance_weights = [5.5, 6, 6.5, 7, 7.5]
-# guidance_weights = [x-0.25 for x in guidance_weights] + guidance_weights
+guidance_weights = [x-0.25 for x in guidance_weights] + guidance_weights
 
 
 for property1, property2 in properties:
@@ -86,5 +86,5 @@ for property1, property2 in properties:
             
                 create_job_file(property1, property2, main_property, input_file, output_file, epoch, str(guidance))
 
-                if args.launch and "mu_mu" not in output_file:
+                if args.launch:
                     os.system(f'sbatch {output_file}')

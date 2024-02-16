@@ -154,20 +154,11 @@ def sample(args, device, generative_model, dataset_info,
     return one_hot, charges, x, node_mask
 
 
-def sample_sweep_conditional(args, device, generative_model, dataset_info, prop_dist, n_nodes=19, n_frames=100, seed=None):
+def sample_sweep_conditional(args, device, generative_model, dataset_info, prop_dist, context, n_nodes=19, n_frames=100, seed=None):
     # n_frames = 10
     nodesxsample = torch.tensor([n_nodes] * n_frames)
 
-    context = []
-    for key in prop_dist.distributions:
-        min_val, max_val = prop_dist.distributions[key][n_nodes]['params']
-        mean, mad = prop_dist.normalizer[key]['mean'], prop_dist.normalizer[key]['mad']
-        min_val = (min_val - mean) / (mad)
-        max_val = (max_val - mean) / (mad)
-        context_row = torch.tensor(np.linspace(min_val, max_val, n_frames)).unsqueeze(1)
-        print(np.linspace(min_val, max_val, n_frames))
-        context.append(context_row)
-    context = torch.cat(context, dim=1).float().to(device)
+    
     one_hot, charges, x, node_mask = sample(args, device, generative_model, dataset_info, prop_dist, nodesxsample=nodesxsample, context=context, fix_noise=True, seed=seed)
     return one_hot, charges, x, node_mask
 

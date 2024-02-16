@@ -370,7 +370,7 @@ def generate_figs(exp_name, epoch):
     # Plot the filtered PNG files
     ncols = 5  # Adjust based on how many images per row you want
     nrows = (len(filtered_pngs) + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(25, nrows * (5+3)))
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(25, nrows * (5+.5)))
     axes = axes.flatten()
 
     for idx, png in enumerate(filtered_pngs):
@@ -379,7 +379,7 @@ def generate_figs(exp_name, epoch):
         axes[idx].imshow(img)
         axes[idx].axis('off')  # Hide axes
         title = f'$w$={ws[idx]}, MAE={maes[idx]:.2f}'
-        axes[idx].set_title(title, fontsize=20) 
+        axes[idx].set_title(title, fontsize=26) 
 
     # Hide unused subplots if any
     for ax in axes[len(filtered_pngs):]:
@@ -390,6 +390,43 @@ def generate_figs(exp_name, epoch):
 
     save_path = os.path.join(base_folder, 'final/combined_images.png')
     os.makedirs(os.path.join(base_folder, 'final'), exist_ok=True)
+    plt.savefig(save_path)
+
+    plt.show()  # Display the plot after saving
+    print(f"Figure saved to {save_path}")
+
+
+def gen_prop_sweep_figs(exp_name, epoch, context):
+    base_folder = f"outputs/prop_sweep/{exp_name}/run{epoch}"
+    pngs = [file for file in os.listdir(base_folder) if '.png' in file]
+    png_idx = [int(file[-7:-4]) for file in pngs]
+    pngs_sorted_by_indx = [x[1] for x in sorted(zip(png_idx, pngs))]
+
+    filtered_pngs = pngs_sorted_by_indx
+
+    # Plot the filtered PNG files
+    ncols = 5  # Adjust based on how many images per row you want
+    nrows = (len(filtered_pngs) + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(25, nrows * (5+.5)))
+    axes = axes.flatten()
+
+    for idx, png in enumerate(filtered_pngs):
+        img_path = os.path.join(base_folder, png)
+        img = plt.imread(img_path)
+        axes[idx].imshow(img)
+        axes[idx].axis('off')  # Hide axes
+        title = f'{context[idx]:.2f}'
+        axes[idx].set_title(title, fontsize=26) 
+
+    # Hide unused subplots if any
+    for ax in axes[len(filtered_pngs):]:
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+    save_path = f"outputs/prop_sweep/{exp_name}/final/{epoch}.png"
+    os.makedirs(f"outputs/prop_sweep/{exp_name}/final", exist_ok=True)
     plt.savefig(save_path)
 
     plt.show()  # Display the plot after saving
@@ -414,9 +451,6 @@ def save_and_sample_guidance(classifier, args, device, model, prop_dist, dataset
     min_val = (min_val - mean) / (mad)
     max_val = (max_val - mean) / (mad)
     context = torch.tensor((min_val+max_val)/2).float().to(device).repeat(1).unsqueeze(1)
-
-    generate_figs(args.exp_name, epoch)
-    raise("Stop here")
 
     print(seed)
     for w in ws:
@@ -456,69 +490,56 @@ def save_and_sample_guidance(classifier, args, device, model, prop_dist, dataset
     
 
     high_level_overview(args.exp_name, context, predicted_prop, epoch, ws)
-    # breakpoint()
 
     micro_writes(args.exp_name, context,predicted_prop, epoch, ws)
 
-
-    # base_folder = f"outputs/analysis/{args.exp_name}/guidance/run{epoch}"
-    # csv_path = f"{base_folder}/gen_properties.csv"
-    # df = pd.read_csv(csv_path)
-
-    # # going down the df, curate all ids for which the MAE decreases relative to the last value
-    # ids_with_decreasing_mae = []
-    # maes = df['mae'].to_list()
-
-    # # Iterate through MAEs to find where a decrease occurs
-    # for i in range(1, len(maes)):
-    #     if maes[i] < maes[i - 1]:  # Check if current MAE is less than the previous MAE
-    #         ids_with_decreasing_mae.append(i) 
-
-    # pngs = [file for file in os.listdir(base_folder) if '.png' in file]
-    # png_idx = [int(file[-7:-4]) for file in pngs]
-    # pngs_sorted_by_indx = [x[1] for x in sorted(zip(png_idx, pngs))]
-
-    # filtered_pngs = [png for i, png in enumerate(pngs_sorted_by_indx) if i in ids_with_decreasing_mae]
-
-    # # Plot the filtered PNG files
-    # ncols = 3  # Adjust based on how many images per row you want
-    # nrows = (len(filtered_pngs) + ncols - 1) // ncols
-    # fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(15, nrows * 5))
-    # axes = axes.flatten()
-
-    # for idx, png in enumerate(filtered_pngs):
-    #     img_path = os.path.join(base_folder, png)
-    #     img = plt.imread(img_path)
-    #     axes[idx].imshow(img)
-    #     axes[idx].axis('off')  # Hide axes
-    #     axes[idx].set_title(f'ID {ids_with_decreasing_mae[idx]}')  # Set title with ID
-
-    # # Hide unused subplots if any
-    # for ax in axes[len(filtered_pngs):]:
-    #     ax.axis('off')
-
-    # plt.tight_layout()
-    # plt.show()
-
-    # save_path = os.path.join(base_folder, 'combined_images.png')
-    # plt.savefig(save_path)
-
-    # plt.show()  # Display the plot after saving
-    # print(f"Figure saved to {save_path}")
-
-
+    generate_figs(args.exp_name, epoch)
 
     return one_hot, charges, x_orig
 
 def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, epoch=0, id_from=0, seed=None):
-    one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist, seed=seed)
+    n_nodes = 19
+    n_frames = 10
+    context = []
+    for key in prop_dist.distributions:
+        min_val, max_val = prop_dist.distributions[key][n_nodes]['params']
+        mean, mad = prop_dist.normalizer[key]['mean'], prop_dist.normalizer[key]['mad']
+        min_val = (min_val - mean) / (mad)
+        max_val = (max_val - mean) / (mad)
+        context_row = torch.tensor(np.linspace(min_val, max_val, n_frames)).unsqueeze(1)
+        print(np.linspace(min_val, max_val, n_frames))
+        context.append(context_row)
+    context = torch.cat(context, dim=1).float().to(device)
+    one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist, context=context, seed=seed, n_frames=n_frames)
 
+    base_folder = 'outputs/prop_sweep/%s/run%s/' % (args.exp_name, epoch)
     vis.save_xyz_file(
-        'outputs/%s/analysis/run%s/' % (args.exp_name, epoch), one_hot, charges, x, dataset_info,
+        base_folder, one_hot, charges, x, dataset_info,
         id_from, name='conditional', node_mask=node_mask)
 
-    vis.visualize_chain("outputs/%s/analysis/run%s/" % (args.exp_name, epoch), dataset_info,
+    vis.visualize_chain(base_folder, dataset_info,
                         wandb=None, mode='conditional', spheres_3d=True)
+
+    csv_folder = 'outputs/prop_sweep/%s/' % (args.exp_name)
+    # sample every 10 entries from context
+    context = context.cpu().detach().numpy().flatten()
+    # save context to csv
+    context_df = pd.DataFrame(context)
+    os.makedirs(csv_folder, exist_ok=True)
+    context_df.to_csv(csv_folder + 'context.csv', index=False, header=False)
+
+    # context_sampled = context[::10].cpu().detach().numpy()
+    # one_hot_sampled = one_hot[::10].cpu().detach().numpy()
+    # charges_sampled = charges[::10].cpu().detach().numpy()
+    # x_sampled = x[::10].cpu().detach().numpy()
+    # node_mask_sampled = node_mask[::10].cpu().detach().numpy()
+   
+    
+    
+    
+    gen_prop_sweep_figs(args.exp_name, epoch, context)
+
+
 
     return one_hot, charges, x
 

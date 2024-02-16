@@ -35,3 +35,7 @@ pretrained/
 logs/
 job_drafts_double/
 job_drafts_qual/
+final_figures/
+final_figures2/
+*.png
+*.jpg
