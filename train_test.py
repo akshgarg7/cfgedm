@@ -210,7 +210,27 @@ def analyze_and_save(epoch, model_sample, nodes_dist, args, device, dataset_info
 
 
 def save_and_sample_conditional(args, device, model, prop_dist, dataset_info, epoch=0, id_from=0):
-    one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist)
+    n_nodes = 19
+    n_frames = 10
+    context = []
+    for key in prop_dist.distributions:
+        min_val, max_val = prop_dist.distributions[key][n_nodes]['params']
+        mean, mad = prop_dist.normalizer[key]['mean'], prop_dist.normalizer[key]['mad']
+        min_val = (min_val - mean) / (mad)
+        max_val = (max_val - mean) / (mad)
+        context_row = torch.tensor(np.linspace(min_val, max_val, n_frames)).unsqueeze(1)
+        print(np.linspace(min_val, max_val, n_frames))
+        context.append(context_row)
+        
+    context = torch.cat(context, dim=1).float().to(device)
+    # if fix_channels:
+    #     context_zeros = torch.zeros_like(context)
+    #     context = torch.cat([context, context_zeros], dim=1)
+
+
+    one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist, context=context, n_frames=n_frames)
+
+    # one_hot, charges, x, node_mask = sample_sweep_conditional(args, device, model, dataset_info, prop_dist)
 
     vis.save_xyz_file(
         'outputs/%s/epoch_%d/conditional/' % (args.exp_name, epoch), one_hot, charges, x, dataset_info,

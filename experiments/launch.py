@@ -7,7 +7,7 @@ command = "nvidia-smi --query-gpu=name,memory.total --format=csv"
 MODEL = "egnn_dynamics"
 DROP_PROB = "0.1"
 DATASET_PORTION = "0.5"
-EPOCHS = "3000"
+EPOCHS = "6000"
 STABILITY_SAMPLES = "500"
 GUIDANCE_WEIGHT = "0.25"  # Replace 'some_value' with the actual value
 TEST_EPOCHS = "100"  # Define TEST_EPOCHS
@@ -50,10 +50,10 @@ import os
 def create_job_file(property):
     job_name = f"job_{property}"
     input_file = 'experiments/template_single.sh'
-    output_file = f'job_drafts/job_{property}.sh'
+    output_file = f'job_drafts_og/job_{property}.sh'
     if args.resume:
         input_file = 'experiments/template_single_resume.sh'
-        output_file = f'job_drafts/job_{property}_resume.sh'
+        output_file = f'job_drafts_og/job_{property}_resume.sh'
 
     with open(input_file, 'r') as file:
         content = file.read()
@@ -78,7 +78,8 @@ def create_job_file(property):
     # os.system(f'sbatch experiments/temp_job_{property}.sh')
     # os.remove(f'experiments/temp_job_{property}.sh')
 
-properties = ['homo', 'lumo', 'gap', 'mu', 'Cv']
+# properties = ['alpha', 'homo', 'lumo', 'gap', 'mu', 'Cv']
+properties = ['gap']
 
 for property in properties:
     create_job_file(property)

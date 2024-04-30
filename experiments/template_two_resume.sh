@@ -2,7 +2,7 @@
 #SBATCH --job-name=job_PROPERTY_PLACEHOLDER_1_PROPERTY_PLACEHOLDER_2
 #SBATCH --output=./logs/job_PROPERTY_PLACEHOLDER_1_PROPERTY_PLACEHOLDER_2_%j.out
 #SBATCH --error=./logs/job_PROPERTY_PLACEHOLDER_1_PROPERTY_PLACEHOLDER_2_%j.err
-#SBATCH --time=3-00:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --mem=16G
 #SBATCH --partition=atlas
 #SBATCH --account=atlas
@@ -17,7 +17,7 @@ cd /atlas/u/akshgarg/cfgedm/
 conda activate torch3.7
 
 # Your job's commands go here
-python main_qm9.py --exp_name single_cfg_PROPERTY_PLACEHOLDER_1_PROPERTY_PLACEHOLDER_2 \
+python main_qm9.py --exp_name icml_PROPERTY_PLACEHOLDER_1_PROPERTY_PLACEHOLDER_2 \
                    --model MODEL_PLACEHOLDER \
                    --lr 2e-4 \
                    --nf 192 \

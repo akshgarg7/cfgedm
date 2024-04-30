@@ -788,7 +788,7 @@ class EnVariationalDiffusion(torch.nn.Module):
         """
         # breakpoint()
         print('drawing samples')
-        if fix_noise:
+        if fix_noise and seed:
             np.random.seed(seed)
             random.seed(seed)
             torch.manual_seed(seed)
