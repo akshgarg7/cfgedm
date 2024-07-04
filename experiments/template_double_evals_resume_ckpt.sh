@@ -16,7 +16,7 @@ cd /atlas/u/akshgarg/cfgedm/
 # Activate the Conda environment
 conda activate torch3.7
 
-python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY1_PROPERTY2_resume \
+python eval_conditional_qm9.py --generators_path outputs/icml_sin_PROPERTY1_PROPERTY2_resume \
                                --classifiers_path pretrained/evaluate_MAIN_PROPERTY \
                                --property MAIN_PROPERTY  \
                                --iterations 10  \

@@ -1,85 +1,75 @@
-# EDM: E(3) Equivariant Diffusion Model for Molecule Generation in 3D.
+# CFGDM: Energy-Free Guidance of Geometric Diffusion Models for 3D Molecule Inverse Design
 
-<img src="equivariant_diffusion/overview.png" width="400">
+Official code release for the paper Energy-Free Guidance of Geometric Diffusion Models for 3D Molecule Inverse Design
 
-Official code release for the paper Equivariant Diffusion for Molecule Generation in 3D.
+## Training the Models
+We have a wrapper, which we use for batch launches as well as auto-scaling for your GPU availability. You can specify your hyperparameters in the `experiments/launch.py` file. The  `--resume`` flat is used to switch between training from a previous checkpoint or from scratch. 
 
-**If** you want to set-up a rdkit environment, it may be easiest to install conda and run:
-``conda create -c conda-forge -n my-rdkit-env rdkit``
+If you want to independently launch training scripts, use: 
 
-and then install the other required packages from there. The code should still run without rdkit installed though.
+```
+python main_qm9.py --exp_name single_cfg_PROPERTY_PLACEHOLDER \
+                   --model MODEL_PLACEHOLDER \
+                   --lr 2e-4 \
+                   --nf 192 \
+                   --n_layers 9 \
+                   --save_model True \
+                   --diffusion_steps 1000 \
+                   --sin_embedding False \
+                   --n_epochs EPOCHS_PLACEHOLDER \
+                   --n_stability_samples STABILITY_SAMPLES_PLACEHOLDER \
+                   --diffusion_noise_schedule polynomial_2 \
+                   --diffusion_noise_precision 1e-5 \
+                   --dequantization deterministic \
+                   --include_charges False \
+                   --diffusion_loss_type l2 \
+                   --batch_size BATCH_SIZE_PLACEHOLDER \
+                   --conditioning PROPERTY_PLACEHOLDER \
+                   --dataset qm9_second_half \
+                   --classifier_free_guidance \
+                   --resume pretrained/cEDM_PROPERTY_PLACEHOLDER \
+                   --guidance_weight GUIDANCE_WEIGHT_PLACEHOLDER \
+                   --test_epochs EPOCH_REPLACE_PLACEHOLDER \
+                   --class_drop_prob DROP_PROB_PLACEHOLDER \
+                   --normalize_factors [1,8,1] \
+```
 
+**For multi-property launches,** use `launch_double.py` - the workflows should stay the same
 
-### Training the EDM:
+## Evaluation
+We also have a script for effective batch evals, which allows us to select between different checkpoints and guidance weights, `launch_evals.py,` which we use for distributing our evaling workflows. The flag --resume is used to differentiate between models trained from scratch versus those that are resumed. 
 
-```python main_qm9.py --n_epochs 3000 --exp_name edm_qm9 --n_stability_samples 1000 --diffusion_noise_schedule polynomial_2 --diffusion_noise_precision 1e-5 --diffusion_steps 1000 --diffusion_loss_type l2 --batch_size 64 --nf 256 --n_layers 9 --lr 1e-4 --normalize_factors [1,4,10] --test_epochs 20 --ema_decay 0.9999```
+For individually evaluating a model, you case use the following placeholder: 
 
+```
+python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY_resume \
+                               --classifiers_path pretrained/evaluate_PROPERTY \
+                               --property PROPERTY  \
+                               --iterations 10  \
+                               --batch_size BATCH_SIZE \
+                               --task edm \
+                               --use_wandb \
+                               --exp_name EXP_NAME \
+                               --override_guidance GUIDANCE_WEIGHT
+```
 
-A visualization of what happens during training:
+## Qualitative evals
+Finally, for qualitative evals, such as generating the figures used in the paper, you can use `launch_evals_qualitative.py`
 
-<img src="equivariant_diffusion/training.png" width="400">
+For an individual run, use
+```
+python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY \
+                               --property PROPERTY  \
+                               --iterations 10  \
+                               --batch_size BATCH_SIZE \
+                               --task qualitative \
+                               --use_wandb \
+                               --exp_name EXP_NAME \
+                               --override_guidance GUIDANCE_WEIGHT \
+                               --ckpt CKPT
+```
 
-
-### After training
-
-To analyze the sample quality of molecules
-
-```python eval_analyze.py --model_path outputs/edm_qm9 --n_samples 10_000```
-
-To visualize some molecules
-
-```python eval_sample.py --model_path outputs/edm_qm9 --n_samples 10_000```
-
-
-
-
-
-### For GEOM-Drugs
-
-First follow the intructions at data/geom/README.md to set up the data.
-
-Training
-```python main_geom_drugs.py --n_epochs 3000 --exp_name edm_geom_drugs --n_stability_samples 500 --diffusion_noise_schedule polynomial_2 --diffusion_steps 1000 --diffusion_noise_precision 1e-5 --diffusion_loss_type l2 --batch_size 64 --nf 256 --n_layers 4 --lr 1e-4 --normalize_factors [1,4,10] --test_epochs 1 --ema_decay 0.9999 --normalization_factor 1 --model egnn_dynamics --visualize_every_batch 10000```
-
-
-Analyze
-
-```python eval_analyze.py --model_path outputs/edm_geom_drugs --n_samples 10_000```
-
-Sample
-
-```python eval_sample.py --model_path outputs/edm_geom_drugs```
-
-
-Small note: The GPUs we used for these experiment were pretty large. If the memory does not fit, try running at a smaller size. The main reason is that the EGNN runs with fully connected message passing, which becomes very memory intensive.
-
-### For Conditional Generation
-
-#### Train a Conditional EDM
-
-```python main_qm9.py --exp_name exp_cond_alpha  --model egnn_dynamics --lr 1e-4  --nf 192 --n_layers 9 --save_model True --diffusion_steps 1000 --sin_embedding False --n_epochs 3000 --n_stability_samples 500 --diffusion_noise_schedule polynomial_2 --diffusion_noise_precision 1e-5 --dequantization deterministic --include_charges False --diffusion_loss_type l2 --batch_size 64 --normalize_factors [1,8,1] --conditioning alpha --dataset qm9_second_half```
-
-The argument `--conditioning alpha` can be set to any of the following properties: `alpha`, `gap`, `homo`, `lumo`, `mu` `Cv`. The same applies to the following commands that also depend on alpha.
-
-#### Generate samples for different property values
-
-```python eval_conditional_qm9.py --generators_path outputs/exp_cond_alpha --property alpha --n_sweeps 10 --task qualitative```
-
-You can set `--generators_path` arguments to `outputs/exp_35_conditional_nf192_9l_alpha` to use our pre-trained model on alpha.
-
-
-#### Train a property classifier network 
-```cd qm9/property_prediction```  
-```python main_qm9_prop.py --num_workers 2 --lr 5e-4 --property alpha --exp_name exp_class_alpha --model_name egnn```
-
-Additionally, you can change the argument `--model_name egnn` by `--model_name numnodes` to train a classifier baseline that classifies only based on the number of nodes.
-
-#### Evaluate the property classifier on EDM
-Evaluate the trained property classifier on the samples generated by the trained EDM model
-
-```python eval_conditional_qm9.py --generators_path outputs/exp_cond_alpha --classifiers_path qm9/property_prediction/outputs/exp_class_alpha --property alpha  --iterations 100  --batch_size 100 --task edm```
-
-To use a pre-trained generator and classifier model for alpha you can use the following arguments: `--generators_path outputs/exp_35_conditional_nf192_9l_alpha` and `--classifiers_path qm9/property_prediction/outputs/exp_class_alpha_pretrained`
-
-
-# cfgedm
+## Credits
+Our work is built on top of seminal work by two papers: 
+* EDM: https://github.com/ehoogeboom/e3_diffusion_for_molecules
+* EEGSDE: https://github.com/gracezhao1997/EEGSDE

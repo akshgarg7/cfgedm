@@ -12,6 +12,7 @@ class EGNN_dynamics_QM9(nn.Module):
                  condition_time=True, tanh=False, mode='egnn_dynamics', norm_constant=0,
                  inv_sublayers=2, sin_embedding=False, normalization_factor=100, aggregation_method='sum'):
         super().__init__()
+        # breakpoint()
         self.mode = mode
         if mode == 'egnn_dynamics':
             self.egnn = EGNN(

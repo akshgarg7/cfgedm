@@ -79,7 +79,7 @@ def create_job_file(property):
     # os.remove(f'experiments/temp_job_{property}.sh')
 
 # properties = ['alpha', 'homo', 'lumo', 'gap', 'mu', 'Cv']
-properties = ['gap']
-
+properties = ['Cv']
+    
 for property in properties:
     create_job_file(property)

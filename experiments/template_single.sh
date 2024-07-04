@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=job_PROPERTY
-#SBATCH --output=./logs/job_PROPERTY_%j.out
-#SBATCH --error=./logs/job_PROPERTY_%j.err
-#SBATCH --time=2-00:00:00
+#SBATCH --job-name=sin_PROPERTY_PLACEHOLDER
+#SBATCH --output=./logs/icml_sin_PROPERTY_PLACEHOLDER_%j.out
+#SBATCH --error=./logs/icml_sin_PROPERTY_PLACEHOLDER%j.err
+#SBATCH --time=7-00:00:00
 #SBATCH --mem=16G
 #SBATCH --partition=atlas
 #SBATCH --account=atlas

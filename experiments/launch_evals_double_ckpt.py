@@ -65,7 +65,9 @@ def create_job_file(property1, property2, main_property, input_file, output_file
 # epochs = [x * 100 for x in epochs]
 
 # guidance_weights = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3.0]
-properties = [('alpha', 'mu')] # , ('alpha', 'homo'), ('homo', 'lumo')]
+# properties = [('alpha', 'mu')] # , ('alpha', 'homo'), ('homo', 'lumo')]
+# properties = [('gap', 'mu'), ('mu', 'Cv')] # resumed models
+# properties = [] # non resumed models
 guidance_weights = [0.5, 1, 1.5, 2, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
 # guidance_weights = [0.5]
 # guidance_weights = [5.5, 6, 6.5, 7, 7.5]
@@ -73,7 +75,7 @@ guidance_weights = [x-0.25 for x in guidance_weights] + guidance_weights
 
 
 for property1, property2 in properties:
-    epochs = gen_file(property1, property2)[-3:]
+    epochs = gen_file(property1, property2, args.resume)[-3:]
     for epoch in epochs:
         for guidance in guidance_weights:
             for main_property in [property1, property2]:

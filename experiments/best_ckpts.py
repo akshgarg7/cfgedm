@@ -1,11 +1,15 @@
 import subprocess
 import re
 
-def gen_file(property1, property2=None):
+def gen_file(property1, property2=None, resume=True):
+    resume_str = '_resume'
+    if not resume:
+        resume_str = ''
+
     # The path you want to list
-    path = f'/atlas/u/akshgarg/cfgedm/outputs/single_cfg_{property1}_resume/'
+    path = f'/atlas/u/akshgarg/cfgedm/outputs/icml_sin_{property1}{resume_str}/'
     if property2:
-        path = f'/atlas/u/akshgarg/cfgedm/outputs/single_cfg_{property1}_{property2}_resume/'
+        path = f'/atlas/u/akshgarg/cfgedm/outputs/icml_{property1}_{property2}{resume_str}/'
 
     # Regular expression to match the pattern 'generative_model_{ckpt}.npy'
     pattern = re.compile(r'generative_model_(\d+)\.npy')

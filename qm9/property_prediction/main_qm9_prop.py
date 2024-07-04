@@ -87,7 +87,9 @@ def train(model, epoch, loader, mean, mad, property, device, partition='train', 
         pred = model(h0=nodes, x=atom_positions, edges=edges, edge_attr=None, node_mask=atom_mask, edge_mask=edge_mask,
                      n_nodes=n_nodes)
 
-        label = label[:, property_index]
+        # check number of num dims on label, if it's non zero, perform the check before
+        if label.dim() > 1:
+            label = label[:, property_index]
 
        # TODO: Come back to check if this is correct, temporary hack for validation
         if partition == 'train':

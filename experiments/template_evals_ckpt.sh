@@ -16,10 +16,10 @@ cd /atlas/u/akshgarg/cfgedm/
 # Activate the Conda environment
 conda activate torch3.7
 
-python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY \
+python eval_conditional_qm9.py --generators_path outputs/icml_sin_PROPERTY \
                                --classifiers_path pretrained/evaluate_PROPERTY \
                                --property PROPERTY  \
-                               --iterations 10  \
+                               --iterations 40  \
                                --batch_size BATCH_SIZE \
                                --task edm \
                                --use_wandb \

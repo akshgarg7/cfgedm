@@ -31,6 +31,7 @@ def get_classifier(dir_path='', device='cpu'):
 
 
 def get_args_gen(dir_path):
+    # breakpoint()
     with open(join(dir_path, 'args.pickle'), 'rb') as f:
         args_gen = pickle.load(f)
     assert args_gen.dataset == 'qm9_second_half'
