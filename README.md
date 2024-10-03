@@ -73,3 +73,29 @@ python eval_conditional_qm9.py --generators_path outputs/single_cfg_PROPERTY \
 Our work is built on top of seminal work by two papers: 
 * EDM: https://github.com/ehoogeboom/e3_diffusion_for_molecules
 * EEGSDE: https://github.com/gracezhao1997/EEGSDE
+
+## Citations
+
+If you use this work (or code), then please cite either of these papers:
+
+```
+@inproceedings{
+nagaraj2024energyfree,
+title={Energy-Free Guidance of Geometric Diffusion Models for 3D Molecule Inverse Design},
+author={Sanjay Nagaraj and Jiaqi Han and Aksh Garg and Minkai Xu},
+booktitle={ICML'24 Workshop ML for Life and Material Science: From Theory to Industry Applications},
+year={2024},
+url={https://openreview.net/forum?id=BsstqCIeOS}
+}
+
+@inproceedings{
+garg2024energyfree,
+title={Energy-Free Guidance of Geometric Diffusion Models for 3D Molecule Inverse Design},
+author={Aksh Garg and Jiaqi Han and Sanjay Nagaraj and Minkai Xu},
+booktitle={ICML 2024 AI for Science Workshop},
+year={2024},
+url={https://openreview.net/forum?id=YcZm8vteqE}
+}
+```
+
+
